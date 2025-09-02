@@ -257,16 +257,24 @@ def handle_plan_enforcer(input_data):
     session_dir = os.path.join(PROJECT_DIR, '.claude/sessions', session_id)
     os.makedirs(session_dir, exist_ok=True)
     
-    # Check if plan exists and is approved
+    # Define plan-related paths
     plan_path = os.path.join(session_dir, 'current_plan.md')
     approved_flag = os.path.join(session_dir, 'plan_approved')
     
+    # Get the file being written/edited
+    filepath = tool_input.get('file_path', '')
+    
+    # Allow writing to plan-related files without checks
+    if filepath in [plan_path, approved_flag]:
+        return 0  # Allow operation without enforcement
+    
+    # For other files, check if plan exists and is approved
     if not os.path.exists(plan_path):
-        print(f"No plan found at {plan_path}. Please create a plan first.", file=sys.stderr)
+        print(f"No plan found. Please create a plan first by writing to {plan_path}", file=sys.stderr)
         return 2  # Block operation
     
     if not os.path.exists(approved_flag):
-        print(f"Plan not approved at {approved_flag}. Please get approval first.", file=sys.stderr)
+        print(f"Plan not approved. Please get approval first by creating {approved_flag}", file=sys.stderr)
         return 2  # Block operation
     
     # Track the file being modified
