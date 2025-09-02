@@ -30,7 +30,28 @@
     }
   },
   "metadata": {
-    "version": "1.1.0",
-    "last_updated": "2025-01-02"
+    "version": "1.2.0",
+    "last_updated": "2025-01-03",
+    "agent_integrations": {
+      "testing-specialist": {
+        "enhanced": true,
+        "coverage_enforcement": "80%+",
+        "related_rules": ["testing-standards"],
+        "consolidates": [],
+        "automation_level": "high"
+      },
+      "security-auditor": {
+        "enhanced": true,
+        "related_rules": ["security"],
+        "consolidates": [],
+        "coverage_requirements": "mandatory"
+      },
+      "code-quality-expert": {
+        "enhanced": true,
+        "related_rules": ["code-quality", "documentation"],
+        "consolidates": ["code-quality", "documentation"],
+        "automation_level": "medium"
+      }
+    }
   }
 }

@@ -24,9 +24,76 @@ PRIORITY_ORDER = {
     'low': 1
 }
 
+def detect_relevant_agents(manifest, matched_rule_names):
+    """
+    Detect which agents should be suggested based on matched rules
+    """
+    agent_suggestions = {}
+    
+    # Get agent integrations from metadata
+    agent_integrations = manifest.get('metadata', {}).get('agent_integrations', {})
+    
+    if not agent_integrations or not matched_rule_names:
+        return agent_suggestions
+    
+    # Check each agent definition
+    for agent_name, agent_config in agent_integrations.items():
+        relevant = False
+        matched_related_rules = []
+        
+        # Check if any matched rules are in this agent's related_rules
+        related_rules = agent_config.get('related_rules', [])
+        for rule in related_rules:
+            if rule in matched_rule_names:
+                relevant = True
+                matched_related_rules.append(rule)
+        
+        # Check if any matched rules are in consolidates list
+        consolidates = agent_config.get('consolidates', [])
+        for rule in consolidates:
+            if rule in matched_rule_names:
+                relevant = True
+                matched_related_rules.append(rule)
+        
+        # If relevant, add to suggestions
+        if relevant:
+            agent_info = {
+                'related_rules': matched_related_rules,
+                'configurations': {}
+            }
+            
+            # Add reason based on agent type
+            if 'testing' in agent_name.lower():
+                agent_info['reason'] = 'Specialized in testing workflows and coverage enforcement'
+            elif 'backend' in agent_name.lower():
+                agent_info['reason'] = 'Expert in backend development, APIs, and database operations'
+            elif 'visual' in agent_name.lower():
+                agent_info['reason'] = 'Specialized in visual regression testing and UI validation'
+            elif 'frontend' in agent_name.lower():
+                agent_info['reason'] = 'Expert in frontend development, UI/UX, and responsive design'
+            elif 'security' in agent_name.lower():
+                agent_info['reason'] = 'Specialized in security audits and vulnerability assessment'
+            else:
+                agent_info['reason'] = 'Domain-specific expertise for the triggered rules'
+            
+            # Add configurations if present
+            if agent_config.get('enhanced'):
+                agent_info['configurations']['enhanced'] = 'Yes'
+            if 'coverage_enforcement' in agent_config:
+                agent_info['configurations']['coverage_enforcement'] = agent_config['coverage_enforcement']
+            if 'automation_level' in agent_config:
+                agent_info['configurations']['automation_level'] = agent_config['automation_level']
+            if 'coverage_requirements' in agent_config:
+                agent_info['configurations']['coverage_requirements'] = agent_config['coverage_requirements']
+            
+            agent_suggestions[agent_name] = agent_info
+    
+    return agent_suggestions
+
 def handle_prompt_validator(input_data):
     """
     Handle UserPromptSubmit hook - loads and injects rules based on keyword matching
+    and suggests agents based on related rules
     """
     prompt = input_data.get('prompt', '').lower()
     session_id = input_data.get('session_id', 'default')
@@ -46,6 +113,7 @@ def handle_prompt_validator(input_data):
     # Build list of rules with their info
     matched_rules = []
     always_load_rules = []
+    matched_rule_names = set()  # Track all matched rule names for agent detection
     
     for rule_name, rule_data in manifest.get('rules', {}).items():
         priority = rule_data.get('priority', 'low')
@@ -69,6 +137,7 @@ def handle_prompt_validator(input_data):
                     'priority': priority,
                     'matched': True
                 })
+                matched_rule_names.add(rule_name)  # Track for agent detection
                 break
     
     # Sort by priority (highest first)
@@ -78,6 +147,9 @@ def handle_prompt_validator(input_data):
     # Combine lists (remove duplicates, keeping matched version)
     matched_names = {r['name'] for r in matched_rules}
     final_rules = matched_rules + [r for r in always_load_rules if r['name'] not in matched_names]
+    
+    # Check for agent integrations
+    agent_suggestions = detect_relevant_agents(manifest, matched_rule_names)
     
     # Build the complete output that will be shown to Claude
     output_lines = []
@@ -150,6 +222,30 @@ def handle_prompt_validator(input_data):
             output_lines.append("---")
             output_lines.append("")
     
+    # Add agent suggestions if any
+    if agent_suggestions:
+        output_lines.append("## 🤖 Recommended Agents")
+        output_lines.append("")
+        output_lines.append("Based on the triggered rules, consider using these specialized agents:")
+        output_lines.append("")
+        
+        for agent_name, agent_info in agent_suggestions.items():
+            output_lines.append(f"### **{agent_name}**")
+            if 'reason' in agent_info:
+                output_lines.append(f"- **Why**: {agent_info['reason']}")
+            if 'related_rules' in agent_info:
+                output_lines.append(f"- **Related Rules**: {', '.join(agent_info['related_rules'])}")
+            if 'configurations' in agent_info:
+                for key, value in agent_info['configurations'].items():
+                    output_lines.append(f"- **{key.replace('_', ' ').title()}**: {value}")
+            output_lines.append("")
+        
+        output_lines.append("💡 **Tip**: Use these agents proactively by mentioning them in your requests")
+        output_lines.append("Example: 'Use the {agent_name} agent to...'")
+        output_lines.append("")
+        output_lines.append("---")
+        output_lines.append("")
+    
     # Join all output lines
     complete_output = '\n'.join(output_lines)
     
@@ -192,11 +288,11 @@ def handle_plan_enforcer(input_data):
     approved_flag = os.path.join(session_dir, 'plan_approved')
     
     if not os.path.exists(plan_path):
-        print("No plan found. Please create a plan first.", file=sys.stderr)
+        print(f"No plan found at {plan_path}. Please create a plan first.", file=sys.stderr)
         return 2  # Block operation
     
     if not os.path.exists(approved_flag):
-        print("Plan not approved. Please get approval first.", file=sys.stderr)
+        print(f"Plan not approved at {approved_flag}. Please get approval first.", file=sys.stderr)
         return 2  # Block operation
     
     # Track the file being modified
