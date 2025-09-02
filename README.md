@@ -54,8 +54,7 @@ When you submit a prompt, `rules_hook.py --prompt-validator`:
   - **Medium**: Shows summary only when triggered
   - **Low**: Shows reference only when triggered
 - Displays a priority summary table
-- Suggests specialized agents based on triggered rules
-- Shows agent configurations and why they're recommended
+- **Suggests specialized agents** (see [How Agent Recommendations Work](#how-agent-recommendations-work) below)
 - Injects appropriate content as context for Claude
 
 ### 2. Plan Enforcement (PreToolUse)
@@ -82,6 +81,39 @@ The system uses a priority-based loading matrix to manage context efficiently:
 | high | false | yes | Load summary + reference |
 | medium | any | yes | Load summary only |
 | low | any | yes | Load reference only |
+
+## How Agent Recommendations Work
+
+**Simple:** When you mention keywords like "test" or "security", the system suggests agents that specialize in those areas.
+
+### Quick Example
+```
+You: "I need to write tests for the API"
+     ↓
+System: Finds keywords → "test" (triggers testing-standards rule)
+                      → "API" (triggers documentation rule)
+     ↓
+System: Checks which agents handle these rules
+     ↓
+Output: 🤖 Recommended Agents:
+        - testing-specialist (for testing-standards)
+        - code-quality-expert (for documentation)
+```
+
+### Current Mappings
+| Keywords You Type | Rule Triggered | Agent Suggested |
+|------------------|----------------|-----------------|
+| test, testing, coverage | testing-standards | testing-specialist |
+| security, auth, password | security | security-auditor |
+| docs, document, api | documentation | code-quality-expert |
+
+### How to Use Suggested Agents
+When you see an agent suggestion, you can use it by mentioning it in your next prompt:
+```
+"Use the testing-specialist agent to create comprehensive tests"
+```
+
+For more details, see [AGENT_RECOMMENDATIONS.md](./AGENT_RECOMMENDATIONS.md)
 
 ## Adding New Rules
 

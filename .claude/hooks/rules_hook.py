@@ -27,33 +27,39 @@ PRIORITY_ORDER = {
 def detect_relevant_agents(manifest, matched_rule_names):
     """
     Detect which agents should be suggested based on matched rules
+    
+    Simple logic:
+    1. User's prompt triggers rules (via keywords)
+    2. Each agent lists which rules it handles
+    3. If a triggered rule matches an agent's list, suggest that agent
+    
+    Example:
+    - User types "test" → triggers "testing-standards" rule
+    - "testing-specialist" agent lists "testing-standards" in its related_rules
+    - Therefore, suggest "testing-specialist" agent
     """
     agent_suggestions = {}
     
-    # Get agent integrations from metadata
+    # Get agent definitions from manifest.json
     agent_integrations = manifest.get('metadata', {}).get('agent_integrations', {})
     
     if not agent_integrations or not matched_rule_names:
         return agent_suggestions
     
-    # Check each agent definition
+    # Check each agent to see if it handles any of the triggered rules
     for agent_name, agent_config in agent_integrations.items():
         relevant = False
         matched_related_rules = []
         
-        # Check if any matched rules are in this agent's related_rules
-        related_rules = agent_config.get('related_rules', [])
-        for rule in related_rules:
-            if rule in matched_rule_names:
-                relevant = True
-                matched_related_rules.append(rule)
+        # Check if this agent handles any of the triggered rules
+        # An agent can list rules in either "related_rules" or "consolidates"
+        all_agent_rules = agent_config.get('related_rules', []) + agent_config.get('consolidates', [])
         
-        # Check if any matched rules are in consolidates list
-        consolidates = agent_config.get('consolidates', [])
-        for rule in consolidates:
+        for rule in all_agent_rules:
             if rule in matched_rule_names:
                 relevant = True
-                matched_related_rules.append(rule)
+                if rule not in matched_related_rules:  # Avoid duplicates
+                    matched_related_rules.append(rule)
         
         # If relevant, add to suggestions
         if relevant:
