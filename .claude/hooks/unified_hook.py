@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
 """
 unified_hook.py - Unified hook handler for Claude Code
 Combines functionality of prompt_validator, plan_enforcer, and commit_helper
@@ -57,15 +61,19 @@ def handle_prompt_validator(input_data):
             })
         
         # Check if any trigger keyword is in prompt
+        matched = False
         for trigger in rule_data.get('triggers', []):
             if trigger.lower() in prompt:
-                matched_rules.append({
-                    'name': rule_name,
-                    'data': rule_data,
-                    'priority': priority,
-                    'matched': True
-                })
+                matched = True
                 break
+        
+        if matched:
+            matched_rules.append({
+                'name': rule_name,
+                'data': rule_data,
+                'priority': priority,
+                'matched': True
+            })
     
     # Sort by priority (highest first)
     matched_rules.sort(key=lambda x: PRIORITY_ORDER.get(x['priority'], 0), reverse=True)
@@ -77,18 +85,6 @@ def handle_prompt_validator(input_data):
     
     # Build the complete output that will be shown to Claude
     output_lines = []
-    output_lines.append("Context from docs/RULES.md:")
-    
-    # Read and include RULES.md if it exists
-    rules_md_path = os.path.join(PROJECT_DIR, 'docs/RULES.md')
-    if os.path.exists(rules_md_path):
-        try:
-            with open(rules_md_path, 'r') as f:
-                output_lines.append(f.read().strip())
-        except IOError:
-            pass
-    
-    output_lines.append("")
     output_lines.append("## Project Rules Loaded")
     output_lines.append("")
     
@@ -99,7 +95,7 @@ def handle_prompt_validator(input_data):
         
         for rule in final_rules:
             status = "✅ Triggered" if rule['matched'] else "📋 Always Loaded"
-            output_lines.append(f"| {rule['name']} | {rule['priority'].upper()} | {status} |")
+            output_lines.append(f"| {rule['name'].title()} | {rule['priority'].upper()} | {status} |")
         
         output_lines.append("")
         output_lines.append("---")
@@ -140,7 +136,7 @@ def handle_prompt_validator(input_data):
             if os.path.exists(rule_path):
                 try:
                     with open(rule_path, 'r') as f:
-                        output_lines.append(f"### 📚 {rule['name']} [PRIORITY: {priority.upper()}]")
+                        output_lines.append(f"### 📚 {rule['name'].title()} [PRIORITY: {priority.upper()}]")
                         output_lines.append("")
                         output_lines.append(f.read().strip())
                         output_lines.append("")
@@ -150,7 +146,7 @@ def handle_prompt_validator(input_data):
                     pass
         elif load_summary and summary:
             # Show summary only
-            output_lines.append(f"### 📝 {rule['name']} [PRIORITY: {priority.upper()}]")
+            output_lines.append(f"### 📝 {rule['name'].title()} [PRIORITY: {priority.upper()}]")
             output_lines.append(f"**Summary:** {summary}")
             if file_path:
                 output_lines.append(f"**Details:** See `.claude/rules/{file_path}` if needed")
