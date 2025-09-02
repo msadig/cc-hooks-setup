@@ -87,7 +87,7 @@ def get_tts_script_path():
     Priority order: ElevenLabs > OpenAI > pyttsx3
     """
     # Get current script directory and construct utils/tts path
-    script_dir = Path(__file__).parent / "OLD" / "hooks"
+    script_dir = Path(__file__).parent
     tts_dir = script_dir / "utils" / "tts"
     
     # Check for ElevenLabs API key (highest priority)
@@ -115,7 +115,7 @@ def get_llm_script_path(purpose="completion"):
     Determine which LLM script to use based on available API keys.
     Priority order: OpenAI > Anthropic
     """
-    script_dir = Path(__file__).parent / "OLD" / "hooks"
+    script_dir = Path(__file__).parent
     llm_dir = script_dir / "utils" / "llm"
     
     # Try OpenAI first (highest priority)
