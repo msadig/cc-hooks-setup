@@ -63,36 +63,10 @@ def detect_relevant_agents(manifest, matched_rule_names):
         
         # If relevant, add to suggestions
         if relevant:
-            agent_info = {
-                'related_rules': matched_related_rules,
-                'configurations': {}
+            # Simple: just track which rules triggered this agent
+            agent_suggestions[agent_name] = {
+                'related_rules': matched_related_rules
             }
-            
-            # Add reason based on agent type
-            if 'testing' in agent_name.lower():
-                agent_info['reason'] = 'Specialized in testing workflows and coverage enforcement'
-            elif 'backend' in agent_name.lower():
-                agent_info['reason'] = 'Expert in backend development, APIs, and database operations'
-            elif 'visual' in agent_name.lower():
-                agent_info['reason'] = 'Specialized in visual regression testing and UI validation'
-            elif 'frontend' in agent_name.lower():
-                agent_info['reason'] = 'Expert in frontend development, UI/UX, and responsive design'
-            elif 'security' in agent_name.lower():
-                agent_info['reason'] = 'Specialized in security audits and vulnerability assessment'
-            else:
-                agent_info['reason'] = 'Domain-specific expertise for the triggered rules'
-            
-            # Add configurations if present
-            if agent_config.get('enhanced'):
-                agent_info['configurations']['enhanced'] = 'Yes'
-            if 'coverage_enforcement' in agent_config:
-                agent_info['configurations']['coverage_enforcement'] = agent_config['coverage_enforcement']
-            if 'automation_level' in agent_config:
-                agent_info['configurations']['automation_level'] = agent_config['automation_level']
-            if 'coverage_requirements' in agent_config:
-                agent_info['configurations']['coverage_requirements'] = agent_config['coverage_requirements']
-            
-            agent_suggestions[agent_name] = agent_info
     
     return agent_suggestions
 
@@ -237,13 +211,7 @@ def handle_prompt_validator(input_data):
         
         for agent_name, agent_info in agent_suggestions.items():
             output_lines.append(f"### **{agent_name}**")
-            if 'reason' in agent_info:
-                output_lines.append(f"- **Why**: {agent_info['reason']}")
-            if 'related_rules' in agent_info:
-                output_lines.append(f"- **Related Rules**: {', '.join(agent_info['related_rules'])}")
-            if 'configurations' in agent_info:
-                for key, value in agent_info['configurations'].items():
-                    output_lines.append(f"- **{key.replace('_', ' ').title()}**: {value}")
+            output_lines.append(f"Suggested because you mentioned: {', '.join(agent_info['related_rules'])}")
             output_lines.append("")
         
         output_lines.append("💡 **Tip**: Use these agents proactively by mentioning them in your requests")

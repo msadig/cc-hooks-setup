@@ -34,23 +34,13 @@
     "last_updated": "2025-01-03",
     "agent_integrations": {
       "testing-specialist": {
-        "enhanced": true,
-        "coverage_enforcement": "80%+",
-        "related_rules": ["testing-standards"],
-        "consolidates": [],
-        "automation_level": "high"
+        "related_rules": ["testing-standards"]
       },
       "security-auditor": {
-        "enhanced": true,
-        "related_rules": ["security"],
-        "consolidates": [],
-        "coverage_requirements": "mandatory"
+        "related_rules": ["security"]
       },
       "code-quality-expert": {
-        "enhanced": true,
-        "related_rules": ["code-quality", "documentation"],
-        "consolidates": ["code-quality", "documentation"],
-        "automation_level": "medium"
+        "related_rules": ["code-quality", "documentation"]
       }
     }
   }

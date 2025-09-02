@@ -52,8 +52,7 @@ Here's a minimal example showing how it works:
   "metadata": {
     "agent_integrations": {
       "security-auditor": {
-        "related_rules": ["security"],  // This agent handles security rule
-        "enhanced": true
+        "related_rules": ["security"]  // This agent handles security rule - that's ALL you need!
       }
     }
   }
@@ -85,8 +84,7 @@ Add an agent that handles this rule:
 ```json
 "agent_integrations": {
   "your-specialist": {
-    "related_rules": ["your-rule"],
-    "enhanced": true
+    "related_rules": ["your-rule"]  // That's it! Nothing else needed.
   }
 }
 ```
@@ -108,6 +106,17 @@ Type a prompt with your keyword and see the agent suggestion appear!
 2. **Saves time** by suggesting the right tool for the job
 3. **Improves quality** by matching expertise to needs
 
+## What DOESN'T Matter (Removed Unnecessary Complexity)
+
+These configurations do **nothing** in Claude Code and have been removed:
+- **`enhanced`**: Was just decorative text
+- **`automation_level`**: Didn't affect anything
+- **`coverage_enforcement`**: Didn't actually enforce anything
+- **`coverage_requirements`**: Didn't make anything mandatory
+- **`consolidates`**: Redundant with `related_rules`
+
+**The ONLY thing that matters** is the `related_rules` array that maps agents to rules.
+
 ## Simplification Ideas
 
 If you find this too complex, you could:
@@ -115,4 +124,4 @@ If you find this too complex, you could:
 2. **Hardcode suggestions** - Always suggest the same agents regardless of context
 3. **Use simpler matching** - Just check if certain words appear, without the rule system
 
-The current system tries to be smart about suggestions, but simpler might be better for your needs!
+The current system is now as simple as possible while still being useful!

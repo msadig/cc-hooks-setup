@@ -132,10 +132,7 @@ For more details, see [AGENT_RECOMMENDATIONS.md](./AGENT_RECOMMENDATIONS.md)
   "metadata": {
     "agent_integrations": {
       "specialist-agent": {
-        "enhanced": true,
-        "related_rules": ["new-rule"],
-        "coverage_enforcement": "80%+",
-        "automation_level": "high"
+        "related_rules": ["new-rule"]  // Simple: just map agent to rule
       }
     }
   }
