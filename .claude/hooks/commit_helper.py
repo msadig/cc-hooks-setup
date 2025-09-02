@@ -2,6 +2,7 @@
 """
 commit_helper.py - Stop hook for auto-commit and test execution
 Reads changed files and prompts Claude to test and commit them
+Uses session ID for isolation between sessions
 """
 import json
 import sys
@@ -9,10 +10,20 @@ import os
 
 # Get project root
 PROJECT_DIR = os.environ.get('CLAUDE_PROJECT_DIR', '.')
-SESSION_DIR = os.path.join(PROJECT_DIR, '.claude/session')
+
+# Read input from stdin
+try:
+    input_data = json.load(sys.stdin)
+    session_id = input_data.get('session_id', 'default')
+except (json.JSONDecodeError, IOError):
+    # Exit normally on invalid input
+    sys.exit(0)
+
+# Get session-specific directory
+session_dir = os.path.join(PROJECT_DIR, '.claude/sessions', session_id)
 
 # Check if there are changed files
-changed_files_path = os.path.join(SESSION_DIR, 'changed_files.txt')
+changed_files_path = os.path.join(session_dir, 'changed_files.txt')
 
 changed_files = []
 if os.path.exists(changed_files_path):

@@ -10,25 +10,26 @@ import os
 
 # Get project root
 PROJECT_DIR = os.environ.get('CLAUDE_PROJECT_DIR', '.')
-SESSION_DIR = os.path.join(PROJECT_DIR, '.claude/session')
 
 # Read input from stdin
 try:
     input_data = json.load(sys.stdin)
     tool_name = input_data.get('tool_name', '')
     tool_input = input_data.get('tool_input', {})
+    session_id = input_data.get('session_id', 'default')
 except (json.JSONDecodeError, IOError):
     # Exit normally on invalid input
     sys.exit(0)
 
 # Only check for Write/Edit operations
 if tool_name in ['Write', 'Edit', 'MultiEdit']:
-    # Ensure session directory exists
-    os.makedirs(SESSION_DIR, exist_ok=True)
+    # Get session-specific directory
+    session_dir = os.path.join(PROJECT_DIR, '.claude/sessions', session_id)
+    os.makedirs(session_dir, exist_ok=True)
     
     # Check if plan exists and is approved
-    plan_path = os.path.join(SESSION_DIR, 'current_plan.md')
-    approved_flag = os.path.join(SESSION_DIR, 'plan_approved')
+    plan_path = os.path.join(session_dir, 'current_plan.md')
+    approved_flag = os.path.join(session_dir, 'plan_approved')
     
     if not os.path.exists(plan_path):
         print("No plan found. Please create a plan first.", file=sys.stderr)
@@ -41,7 +42,7 @@ if tool_name in ['Write', 'Edit', 'MultiEdit']:
     # Track the file being modified
     filepath = tool_input.get('file_path', '')
     if filepath:
-        changed_files_path = os.path.join(SESSION_DIR, 'changed_files.txt')
+        changed_files_path = os.path.join(session_dir, 'changed_files.txt')
         
         # Check if file is already tracked
         existing_files = set()

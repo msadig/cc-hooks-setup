@@ -20,10 +20,11 @@ PRIORITY_ORDER = {
     'low': 1
 }
 
-# Read prompt from stdin
+# Read input from stdin
 try:
     input_data = json.load(sys.stdin)
     prompt = input_data.get('prompt', '').lower()
+    session_id = input_data.get('session_id', 'default')
 except (json.JSONDecodeError, IOError):
     # Exit silently on invalid input
     sys.exit(0)
@@ -155,8 +156,8 @@ complete_output = '\n'.join(output_lines)
 # Print to stdout for Claude to see
 print(complete_output)
 
-# Ensure session directory exists
-session_dir = os.path.join(PROJECT_DIR, '.claude/session')
+# Ensure session-specific directory exists
+session_dir = os.path.join(PROJECT_DIR, '.claude/sessions', session_id)
 os.makedirs(session_dir, exist_ok=True)
 
 # Save the exact same output to loaded_rules.txt
