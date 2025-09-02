@@ -327,7 +327,10 @@ def handle_commit_helper(input_data):
         # Tell Claude to run tests and commit
         output = {
             "decision": "block",
-            "reason": f"Session complete. Please run appropriate tests for these modified files and commit the changes: {', '.join(changed_files)}"
+            "reason": (
+                f"Session complete. Please run appropriate tests for these modified files and commit the changes: {', '.join(changed_files)}"
+                "\n If you already committed these changes, please empty the changed files list."
+            )
         }
         print(json.dumps(output))
     
