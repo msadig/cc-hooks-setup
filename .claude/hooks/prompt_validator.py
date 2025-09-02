@@ -3,6 +3,7 @@
 prompt_validator.py - UserPromptSubmit hook for rule injection
 Loads and injects rules based on keyword matching from manifest
 Implements priority-based loading and summary/full content strategy
+Saves the complete context to loaded_rules.txt for debugging/auditing
 """
 import json
 import sys
@@ -77,22 +78,25 @@ always_load_rules.sort(key=lambda x: PRIORITY_ORDER.get(x['priority'], 0), rever
 matched_names = {r['name'] for r in matched_rules}
 final_rules = matched_rules + [r for r in always_load_rules if r['name'] not in matched_names]
 
-# Output rules based on loading matrix
-print("## Project Rules Loaded\n")
+# Build the complete output that will be shown to Claude
+output_lines = []
+output_lines.append("## Project Rules Loaded")
+output_lines.append("")
 
 if final_rules:
-    print("### Rule Priority Summary")
-    print("| Rule | Priority | Status |")
-    print("|------|----------|--------|")
+    output_lines.append("### Rule Priority Summary")
+    output_lines.append("| Rule | Priority | Status |")
+    output_lines.append("|------|----------|--------|")
     
     for rule in final_rules:
         status = "✅ Triggered" if rule['matched'] else "📋 Always Loaded"
-        print(f"| {rule['name']} | {rule['priority'].upper()} | {status} |")
+        output_lines.append(f"| {rule['name']} | {rule['priority'].upper()} | {status} |")
     
-    print("\n---\n")
+    output_lines.append("")
+    output_lines.append("---")
+    output_lines.append("")
 
 # Load rules based on priority and loading matrix
-loaded_files = []
 for rule in final_rules:
     rule_data = rule['data']
     priority = rule['priority']
@@ -127,30 +131,40 @@ for rule in final_rules:
         if os.path.exists(rule_path):
             try:
                 with open(rule_path, 'r') as f:
-                    print(f"### 📚 {rule['name']} [PRIORITY: {priority.upper()}]\n")
-                    print(f.read())
-                    print("\n---\n")
-                    loaded_files.append(file_path)
+                    output_lines.append(f"### 📚 {rule['name']} [PRIORITY: {priority.upper()}]")
+                    output_lines.append("")
+                    output_lines.append(f.read().strip())
+                    output_lines.append("")
+                    output_lines.append("---")
+                    output_lines.append("")
             except IOError:
                 pass
     elif load_summary and summary:
         # Show summary only
-        print(f"### 📝 {rule['name']} [PRIORITY: {priority.upper()}]")
-        print(f"**Summary:** {summary}")
+        output_lines.append(f"### 📝 {rule['name']} [PRIORITY: {priority.upper()}]")
+        output_lines.append(f"**Summary:** {summary}")
         if file_path:
-            print(f"**Details:** See `.claude/rules/{file_path}` if needed")
-        print("\n---\n")
+            output_lines.append(f"**Details:** See `.claude/rules/{file_path}` if needed")
+        output_lines.append("")
+        output_lines.append("---")
+        output_lines.append("")
+
+# Join all output lines
+complete_output = '\n'.join(output_lines)
+
+# Print to stdout for Claude to see
+print(complete_output)
 
 # Ensure session directory exists
 session_dir = os.path.join(PROJECT_DIR, '.claude/session')
 os.makedirs(session_dir, exist_ok=True)
 
-# Save loaded rules list
-if loaded_files:
+# Save the exact same output to loaded_rules.txt
+if final_rules:
     loaded_rules_path = os.path.join(session_dir, 'loaded_rules.txt')
     try:
         with open(loaded_rules_path, 'w') as f:
-            f.write('\n'.join(loaded_files))
+            f.write(complete_output)
     except IOError:
         pass
 
