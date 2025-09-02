@@ -3,20 +3,20 @@
     "UserPromptSubmit": [{
       "hooks": [{
         "type": "command",
-        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/unified_hook.py --prompt-validator"
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --prompt-validator"
       }]
     }],
     "PreToolUse": [{
       "matcher": "Write|Edit|MultiEdit",
       "hooks": [{
         "type": "command",
-        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/unified_hook.py --plan-enforcer"
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --plan-enforcer"
       }]
     }],
     "Stop": [{
       "hooks": [{
         "type": "command",
-        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/unified_hook.py --commit-helper"
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --commit-helper"
       }]
     }]
   }

@@ -4,9 +4,9 @@
 # dependencies = []
 # ///
 """
-unified_hook.py - Unified hook handler for Claude Code
+rules_hook.py - Unified hook handler for Claude Code rule enforcement
 Combines functionality of prompt_validator, plan_enforcer, and commit_helper
-Uses flags to enable specific functionality
+Uses flags to enable specific functionality and suggests agents based on triggered rules
 """
 import json
 import sys

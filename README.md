@@ -1,16 +1,18 @@
-# Hook-Based Rule Enforcement System
+# Hook-Based Rule Enforcement System with Agent Suggestions
 
-A simple, K.I.S.S.-compliant hook system for Claude Code that automatically loads and enforces project-specific rules.
+A simple, K.I.S.S.-compliant hook system for Claude Code that automatically loads and enforces project-specific rules and suggests specialized agents based on triggered rules.
 
 ## Features
 
 - **Priority-Based Rule Loading**: Rules sorted by priority (critical > high > medium > low)
 - **Smart Context Management**: Shows summaries or full content based on priority and triggers
 - **Always Load Summary**: Critical rules can be configured to always show summaries
+- **Intelligent Agent Suggestions**: Automatically recommends specialized agents based on triggered rules
 - **Plan Enforcement**: Requires approved plans before code modifications
 - **File Tracking**: Tracks all modified files for testing and commit
 - **Generic Testing**: Works with any project type (JavaScript, Python, Go, etc.)
 - **Auto-Commit Support**: Prompts for testing and committing at session end
+- **Unified Hook Handler**: Single script (`rules_hook.py`) with flag-based routing
 
 ## Installation
 
@@ -23,27 +25,27 @@ A simple, K.I.S.S.-compliant hook system for Claude Code that automatically load
 ```
 .claude/
 ├── hooks/
-│   ├── prompt_validator.py    # Loads rules based on keywords
-│   ├── plan_enforcer.py       # Enforces plan approval
-│   └── commit_helper.py       # Handles testing and commits
+│   ├── rules_hook.py          # Unified hook handler with all functionality
+│   └── test_rules_hook.py     # Test suite for the hook
 ├── rules/
-│   ├── manifest.json          # Rule definitions and triggers
+│   ├── manifest.json          # Rule definitions, triggers, and agent integrations
 │   ├── testing-standards.md   # Testing requirements
 │   ├── code-quality.md        # Code quality standards
 │   ├── documentation.md       # Documentation requirements
 │   └── security.md            # Security best practices
-├── session/                   # Runtime state (auto-created)
-│   ├── current_plan.md       # Current implementation plan
-│   ├── plan_approved         # Approval flag (empty file)
-│   ├── loaded_rules.txt      # Which rules were loaded
-│   └── changed_files.txt     # Files modified in session
+├── sessions/                  # Session-specific runtime state (auto-created)
+│   └── [session-id]/
+│       ├── current_plan.md    # Current implementation plan
+│       ├── plan_approved      # Approval flag (empty file)
+│       ├── loaded_rules.txt   # Which rules were loaded
+│       └── changed_files.txt  # Files modified in session
 └── settings.json              # Hook configuration
 ```
 
 ## How It Works
 
-### 1. Priority-Based Rule Loading (UserPromptSubmit)
-When you submit a prompt, `prompt_validator.py`:
+### 1. Priority-Based Rule Loading with Agent Suggestions (UserPromptSubmit)
+When you submit a prompt, `rules_hook.py --prompt-validator`:
 - Checks for keywords in your prompt
 - Sorts rules by priority (critical > high > medium > low)
 - Loads rules based on the loading matrix:
@@ -52,16 +54,18 @@ When you submit a prompt, `prompt_validator.py`:
   - **Medium**: Shows summary only when triggered
   - **Low**: Shows reference only when triggered
 - Displays a priority summary table
+- Suggests specialized agents based on triggered rules
+- Shows agent configurations and why they're recommended
 - Injects appropriate content as context for Claude
 
 ### 2. Plan Enforcement (PreToolUse)
-Before any file modification, `plan_enforcer.py`:
-- Checks if a plan exists in `.claude/session/current_plan.md`
-- Verifies the plan is approved (`.claude/session/plan_approved` exists)
-- Tracks modified files to `.claude/session/changed_files.txt`
+Before any file modification, `rules_hook.py --plan-enforcer`:
+- Checks if a plan exists in `.claude/sessions/[session-id]/current_plan.md`
+- Verifies the plan is approved (`.claude/sessions/[session-id]/plan_approved` exists)
+- Tracks modified files to `.claude/sessions/[session-id]/changed_files.txt`
 
 ### 3. Testing & Commit (Stop)
-At session end, `commit_helper.py`:
+At session end, `rules_hook.py --commit-helper`:
 - Reads the list of changed files
 - Prompts Claude to run appropriate tests
 - Requests commit with descriptive message
@@ -92,6 +96,16 @@ The system uses a priority-based loading matrix to manage context efficiently:
       "priority": "high",
       "always_load_summary": false
     }
+  },
+  "metadata": {
+    "agent_integrations": {
+      "specialist-agent": {
+        "enhanced": true,
+        "related_rules": ["new-rule"],
+        "coverage_enforcement": "80%+",
+        "automation_level": "high"
+      }
+    }
   }
 }
 ```
@@ -100,16 +114,15 @@ The system uses a priority-based loading matrix to manage context efficiently:
 
 ## Testing
 
-Run the test suites:
+Run the test suite:
 ```bash
-python3 test_hooks.py      # Basic functionality tests
-python3 test_priority.py   # Priority-based loading tests
+python3 .claude/hooks/test_rules_hook.py  # Complete test suite for all functionality
 ```
 
 ## Manual Workflow
 
-1. **Create a plan**: Save it to `.claude/session/current_plan.md`
-2. **Approve the plan**: Create empty file `.claude/session/plan_approved`
+1. **Create a plan**: Save it to `.claude/sessions/[session-id]/current_plan.md`
+2. **Approve the plan**: Create empty file `.claude/sessions/[session-id]/plan_approved`
 3. **Make changes**: The hooks will track all file modifications
 4. **End session**: Claude will be prompted to test and commit
 
@@ -122,4 +135,5 @@ The hooks are configured in `.claude/settings.json`. The system uses `$CLAUDE_PR
 - **K.I.S.S.**: Simple file-based state management
 - **No OOP**: All scripts use simple functions
 - **Generic**: Works with any project type
-- **Minimal**: Only 3 hook scripts, 1 tracking file
+- **Unified**: Single hook script with flag-based routing
+- **Intelligent**: Suggests specialized agents based on context

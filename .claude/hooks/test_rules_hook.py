@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test script to verify unified_hook.py functionality
+Test script to verify rules_hook.py functionality
 """
 import json
 import subprocess
@@ -21,9 +21,9 @@ def test_prompt_validator():
         "session_id": "test-session"
     }
     
-    # Run the unified hook with --prompt-validator flag
+    # Run the rules hook with --prompt-validator flag
     result = subprocess.run(
-        [sys.executable, f"{PROJECT_DIR}/.claude/hooks/unified_hook.py", "--prompt-validator"],
+        [sys.executable, f"{PROJECT_DIR}/.claude/hooks/rules_hook.py", "--prompt-validator"],
         input=json.dumps(test_input),
         capture_output=True,
         text=True
@@ -59,7 +59,7 @@ def test_plan_enforcer():
     }
     
     result = subprocess.run(
-        [sys.executable, f"{PROJECT_DIR}/.claude/hooks/unified_hook.py", "--plan-enforcer"],
+        [sys.executable, f"{PROJECT_DIR}/.claude/hooks/rules_hook.py", "--plan-enforcer"],
         input=json.dumps(test_input),
         capture_output=True,
         text=True
@@ -78,7 +78,7 @@ def test_plan_enforcer():
     
     # Test with plan (should pass)
     result = subprocess.run(
-        [sys.executable, f"{PROJECT_DIR}/.claude/hooks/unified_hook.py", "--plan-enforcer"],
+        [sys.executable, f"{PROJECT_DIR}/.claude/hooks/rules_hook.py", "--plan-enforcer"],
         input=json.dumps(test_input),
         capture_output=True,
         text=True
@@ -116,7 +116,7 @@ def test_commit_helper():
     }
     
     result = subprocess.run(
-        [sys.executable, f"{PROJECT_DIR}/.claude/hooks/unified_hook.py", "--commit-helper"],
+        [sys.executable, f"{PROJECT_DIR}/.claude/hooks/rules_hook.py", "--commit-helper"],
         input=json.dumps(test_input),
         capture_output=True,
         text=True
@@ -134,7 +134,7 @@ def test_commit_helper():
     
     # Test with changed files (should block and request commit)
     result = subprocess.run(
-        [sys.executable, f"{PROJECT_DIR}/.claude/hooks/unified_hook.py", "--commit-helper"],
+        [sys.executable, f"{PROJECT_DIR}/.claude/hooks/rules_hook.py", "--commit-helper"],
         input=json.dumps(test_input),
         capture_output=True,
         text=True
@@ -170,7 +170,7 @@ def test_flag_routing():
     
     # Run without any flags (should do nothing)
     result = subprocess.run(
-        [sys.executable, f"{PROJECT_DIR}/.claude/hooks/unified_hook.py"],
+        [sys.executable, f"{PROJECT_DIR}/.claude/hooks/rules_hook.py"],
         input=json.dumps(test_input),
         capture_output=True,
         text=True
@@ -184,7 +184,7 @@ def test_flag_routing():
     
     # Run with wrong flag (should do nothing)
     result = subprocess.run(
-        [sys.executable, f"{PROJECT_DIR}/.claude/hooks/unified_hook.py", "--commit-helper"],
+        [sys.executable, f"{PROJECT_DIR}/.claude/hooks/rules_hook.py", "--commit-helper"],
         input=json.dumps(test_input),
         capture_output=True,
         text=True
@@ -200,7 +200,7 @@ def test_flag_routing():
 
 def main():
     print("=" * 50)
-    print("Testing Unified Hook Functionality")
+    print("Testing Rules Hook Functionality")
     print("=" * 50)
     
     all_passed = True
