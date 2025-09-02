@@ -61,19 +61,15 @@ def handle_prompt_validator(input_data):
             })
         
         # Check if any trigger keyword is in prompt
-        matched = False
         for trigger in rule_data.get('triggers', []):
             if trigger.lower() in prompt:
-                matched = True
+                matched_rules.append({
+                    'name': rule_name,
+                    'data': rule_data,
+                    'priority': priority,
+                    'matched': True
+                })
                 break
-        
-        if matched:
-            matched_rules.append({
-                'name': rule_name,
-                'data': rule_data,
-                'priority': priority,
-                'matched': True
-            })
     
     # Sort by priority (highest first)
     matched_rules.sort(key=lambda x: PRIORITY_ORDER.get(x['priority'], 0), reverse=True)
