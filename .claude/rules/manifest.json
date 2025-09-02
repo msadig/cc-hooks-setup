@@ -1,0 +1,36 @@
+{
+  "rules": {
+    "testing-standards": {
+      "summary": "All code must have tests with >80% coverage",
+      "file": "testing-standards.md",
+      "triggers": ["test", "testing", "coverage", "spec"],
+      "priority": "high",
+      "always_load_summary": false
+    },
+    "code-quality": {
+      "summary": "Follow clean code principles and linting rules",
+      "file": "code-quality.md",
+      "triggers": ["code", "quality", "lint", "clean"],
+      "priority": "medium",
+      "always_load_summary": false
+    },
+    "documentation": {
+      "summary": "Document all public APIs and complex logic",
+      "file": "documentation.md",
+      "triggers": ["docs", "document", "readme", "api"],
+      "priority": "medium",
+      "always_load_summary": false
+    },
+    "security": {
+      "summary": "Follow security best practices, no secrets in code",
+      "file": "security.md",
+      "triggers": ["security", "auth", "password", "secret", "token"],
+      "priority": "critical",
+      "always_load_summary": true
+    }
+  },
+  "metadata": {
+    "version": "1.1.0",
+    "last_updated": "2025-01-02"
+  }
+}
