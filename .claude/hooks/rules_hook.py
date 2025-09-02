@@ -12,6 +12,7 @@ import json
 import sys
 import os
 import argparse
+import subprocess
 
 # Get project root
 PROJECT_DIR = os.environ.get('CLAUDE_PROJECT_DIR', '.')
@@ -258,14 +259,16 @@ def handle_plan_enforcer(input_data):
     os.makedirs(session_dir, exist_ok=True)
     
     # Define plan-related paths
-    plan_path = os.path.join(session_dir, 'current_plan.md')
-    approved_flag = os.path.join(session_dir, 'plan_approved')
+    plan_file_name = 'current_plan.md'
+    plan_path = os.path.join(session_dir, plan_file_name)
+    approved_flag_file_name = 'plan_approved'
+    approved_flag = os.path.join(session_dir, approved_flag_file_name)
     
     # Get the file being written/edited
     filepath = tool_input.get('file_path', '')
     
     # Allow writing to plan-related files without checks
-    if filepath in [plan_path, approved_flag]:
+    if any(x in filepath for x in [plan_file_name, approved_flag_file_name]):
         return 0  # Allow operation without enforcement
     
     # For other files, check if plan exists and is approved
@@ -303,7 +306,7 @@ def handle_plan_enforcer(input_data):
 
 def handle_commit_helper(input_data):
     """
-    Handle Stop hook - prompts for testing and committing changed files
+    Handle Stop hook - check if files need committing, otherwise exit cleanly
     """
     session_id = input_data.get('session_id', 'default')
     
@@ -323,16 +326,77 @@ def handle_commit_helper(input_data):
     else:
         return 0  # No changed files
     
-    if changed_files:
-        # Tell Claude to run tests and commit
-        output = {
-            "decision": "block",
-            "reason": (
-                f"Session complete. Please run appropriate tests for these modified files and commit the changes: {', '.join(changed_files)}"
-                "\n If you already committed these changes, please empty the changed files list."
-            )
-        }
-        print(json.dumps(output))
+    if not changed_files:
+        return 0  # No files to check
+    
+    # Check git status for each file
+    uncommitted_files = []
+    
+    try:
+        # Get git status
+        result = subprocess.run(['git', 'status', '--porcelain'], 
+                              capture_output=True, text=True, cwd=PROJECT_DIR)
+        
+        if result.returncode == 0:
+            # Parse git status output
+            git_status_lines = result.stdout.strip().split('\n') if result.stdout.strip() else []
+            
+            # Extract files that have changes (staged, modified, or untracked)
+            git_changed_files = set()
+            for line in git_status_lines:
+                if len(line) >= 3:
+                    filepath = line[3:].strip()  # Remove status prefix
+                    git_changed_files.add(filepath)
+            
+            
+            # Check if any files from changed_files.txt are uncommitted
+            for filepath in changed_files:
+                # Normalize paths - handle both absolute and relative paths
+                if os.path.isabs(filepath):
+                    # Convert absolute path to relative
+                    try:
+                        normalized_path = os.path.relpath(filepath, PROJECT_DIR)
+                    except ValueError:
+                        normalized_path = filepath
+                else:
+                    normalized_path = filepath
+                
+                if normalized_path in git_changed_files:
+                    # Check if file is in .gitignore
+                    gitignore_result = subprocess.run(['git', 'check-ignore', filepath], 
+                                                    capture_output=True, cwd=PROJECT_DIR)
+                    
+                    if gitignore_result.returncode != 0:  # Not ignored
+                        uncommitted_files.append(filepath)
+        
+        if uncommitted_files:
+            # Tell Claude to run tests and commit
+            output = {
+                "decision": "block",
+                "reason": (
+                    f"Session complete. Please run appropriate tests for these modified files and commit the changes: {', '.join(uncommitted_files)}"
+                    "\n If you already committed these changes, please empty the changed files list."
+                )
+            }
+            print(json.dumps(output))
+        else:
+            # All files are committed or ignored, clear the changed files list
+            try:
+                os.remove(changed_files_path)
+            except OSError:
+                pass
+    
+    except subprocess.SubprocessError:
+        # Git command failed, fall back to original behavior
+        if changed_files:
+            output = {
+                "decision": "block", 
+                "reason": (
+                    f"Session complete. Please run appropriate tests for these modified files and commit the changes: {', '.join(changed_files)}"
+                    "\n If you already committed these changes, please empty the changed files list."
+                )
+            }
+            print(json.dumps(output))
     
     return 0
 
