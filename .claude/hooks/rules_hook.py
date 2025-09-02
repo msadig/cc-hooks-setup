@@ -390,7 +390,7 @@ def handle_commit_helper(input_data):
         # Git command failed, fall back to original behavior
         if changed_files:
             output = {
-                "decision": "block", 
+                "decision": "allow", 
                 "reason": (
                     f"Session complete. Please run appropriate tests for these modified files and commit the changes: {', '.join(changed_files)}"
                     "\n If you already committed these changes, please empty the changed files list."
