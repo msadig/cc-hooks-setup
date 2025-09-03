@@ -8,12 +8,13 @@ rules_hook.py - Unified hook handler for Claude Code rule enforcement
 Combines functionality of prompt_validator, plan_enforcer, and commit_helper
 Uses flags to enable specific functionality and suggests agents based on triggered rules
 """
-import json
-import sys
-import os
 import argparse
-import subprocess
+import datetime
 import glob
+import json
+import os
+import subprocess
+import sys
 
 # Get project root
 PROJECT_DIR = os.environ.get('CLAUDE_PROJECT_DIR', '.')
@@ -41,7 +42,6 @@ def add_always_load_context():
     context_parts = []
 
     # Load primary context files with glob pattern matching
-    import glob
     matched_primary_files = set()  # Use set to avoid duplicates
     
     for pattern in primary_context_patterns:
@@ -522,7 +522,6 @@ def handle_session_start(input_data):
     os.makedirs(session_dir, exist_ok=True)
     
     try:
-        import datetime
         log_data = {
             "timestamp": datetime.datetime.now().isoformat(),
             "session_id": session_id,
