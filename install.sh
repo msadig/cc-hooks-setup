@@ -221,6 +221,200 @@ else
     echo "   You can still use the hooks normally"
 fi
 
+# Interactive additional hooks installation
+echo
+echo -e "${BLUE}=== Additional Hooks Installation ===${NC}"
+echo
+echo "Would you like to install additional hooks for enhanced functionality?"
+echo "(These are optional and can be customized later)"
+echo
+
+# Helper Hooks Installation
+echo -e "${YELLOW}📦 Helper Hooks${NC}"
+echo "   Provides:"
+echo "   • Git status display on session start"
+echo "   • Safety protection (rm -rf blocking)"
+echo "   • Session notifications and TTS support"
+echo "   • Automatic context loading"
+echo
+read -p "Install Helper Hooks? (y/n): " install_helper
+
+if [[ "$install_helper" == "y" || "$install_helper" == "Y" ]]; then
+    HELPER_SCRIPT="$HOOKS_DIR/helper_hooks.py"
+    
+    if [ ! -f "$HELPER_SCRIPT" ]; then
+        echo -e "${RED}❌ Helper hooks script not found at: $HELPER_SCRIPT${NC}"
+    else
+        # Test if helper_hooks.py is executable
+        if uv run "$HELPER_SCRIPT" --help &> /dev/null; then
+            echo "Installing Helper Hooks..."
+            
+            # Update settings.json with helper hooks
+            jq --arg helper_script "$HELPER_SCRIPT" '
+              # Add SessionStart hook for git status and context
+              if .hooks.SessionStart == null then .hooks.SessionStart = [] else . end |
+              .hooks.SessionStart += [{
+                "hooks": [{
+                  "type": "command",
+                  "command": ("uv run " + $helper_script + " session_start --load-context"),
+                  "timeout": 10
+                }]
+              }] |
+              
+              # Add PreToolUse hook for safety checks
+              if .hooks.PreToolUse == null then .hooks.PreToolUse = [] else . end |
+              .hooks.PreToolUse += [{
+                "hooks": [{
+                  "type": "command",
+                  "command": ("uv run " + $helper_script + " pre_tool_use"),
+                  "timeout": 5
+                }]
+              }] |
+              
+              # Add Stop hook for notifications
+              if .hooks.Stop == null then .hooks.Stop = [] else . end |
+              .hooks.Stop += [{
+                "hooks": [{
+                  "type": "command",
+                  "command": ("uv run " + $helper_script + " stop --announce"),
+                  "timeout": 10
+                }]
+              }] |
+              
+              # Add Notification hook
+              if .hooks.Notification == null then .hooks.Notification = [] else . end |
+              .hooks.Notification += [{
+                "hooks": [{
+                  "type": "command",
+                  "command": ("uv run " + $helper_script + " notification"),
+                  "timeout": 5
+                }]
+              }] |
+              
+              # Add SubagentStop hook
+              if .hooks.SubagentStop == null then .hooks.SubagentStop = [] else . end |
+              .hooks.SubagentStop += [{
+                "hooks": [{
+                  "type": "command",
+                  "command": ("uv run " + $helper_script + " subagent_stop"),
+                  "timeout": 5
+                }]
+              }]
+            ' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+            
+            echo -e "${GREEN}✓${NC} Helper Hooks installed successfully"
+        else
+            echo -e "${YELLOW}⚠${NC} Could not verify helper_hooks.py, skipping installation"
+        fi
+    fi
+else
+    echo "Skipping Helper Hooks installation"
+fi
+
+echo
+
+# Rules Hook Installation
+echo -e "${YELLOW}📋 Rules Hook${NC}"
+echo "   Provides:"
+echo "   • Auto-loads project rules from .claude/rules/"
+echo "   • Enforces planning before code changes"
+echo "   • Commit reminders for modified files"
+echo "   • Context-aware development workflow"
+echo
+read -p "Install Rules Hook? (y/n): " install_rules
+
+if [[ "$install_rules" == "y" || "$install_rules" == "Y" ]]; then
+    RULES_SCRIPT="$HOOKS_DIR/rules_hook.py"
+    
+    if [ ! -f "$RULES_SCRIPT" ]; then
+        echo -e "${RED}❌ Rules hook script not found at: $RULES_SCRIPT${NC}"
+    else
+        # Test if rules_hook.py is executable
+        if uv run "$RULES_SCRIPT" --help &> /dev/null; then
+            echo "Installing Rules Hook..."
+            
+            # Update settings.json with rules hooks
+            jq --arg rules_script "$RULES_SCRIPT" '
+              # Add UserPromptSubmit hook for prompt validation
+              if .hooks.UserPromptSubmit == null then .hooks.UserPromptSubmit = [] else . end |
+              .hooks.UserPromptSubmit += [{
+                "hooks": [{
+                  "type": "command",
+                  "command": ("uv run " + $rules_script + " --prompt-validator"),
+                  "timeout": 10
+                }]
+              }] |
+              
+              # Add PreToolUse hook for plan enforcement
+              if .hooks.PreToolUse == null then .hooks.PreToolUse = [] else . end |
+              .hooks.PreToolUse += [{
+                "hooks": [{
+                  "type": "command",
+                  "command": ("uv run " + $rules_script + " --plan-enforcer"),
+                  "timeout": 5
+                }]
+              }] |
+              
+              # Add Stop hook for commit helper
+              if .hooks.Stop == null then .hooks.Stop = [] else . end |
+              .hooks.Stop += [{
+                "hooks": [{
+                  "type": "command",
+                  "command": ("uv run " + $rules_script + " --commit-helper"),
+                  "timeout": 10
+                }]
+              }] |
+              
+              # Add SessionStart hook for context loading
+              if .hooks.SessionStart == null then .hooks.SessionStart = [] else . end |
+              .hooks.SessionStart += [{
+                "hooks": [{
+                  "type": "command",
+                  "command": ("uv run " + $rules_script + " --session-start"),
+                  "timeout": 10
+                }]
+              }]
+            ' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+            
+            echo -e "${GREEN}✓${NC} Rules Hook installed successfully"
+        else
+            echo -e "${YELLOW}⚠${NC} Could not verify rules_hook.py, skipping installation"
+        fi
+    fi
+else
+    echo "Skipping Rules Hook installation"
+fi
+
+echo
+
+# Show installed hooks summary
+echo -e "${BLUE}=== Installed Hooks Summary ===${NC}"
+echo
+echo -e "${GREEN}✓${NC} Indexer Hooks (Always installed):"
+echo "   • UserPromptSubmit: Detects -i flag for index-aware mode"
+echo "   • SessionStart: Auto-indexes on session start"
+echo "   • PreCompact: Updates index before compacting"
+echo "   • Stop: Updates index on session end"
+
+if [[ "$install_helper" == "y" || "$install_helper" == "Y" ]]; then
+    echo
+    echo -e "${GREEN}✓${NC} Helper Hooks:"
+    echo "   • SessionStart: Shows git status and loads context"
+    echo "   • PreToolUse: Blocks dangerous commands"
+    echo "   • Stop: Session notifications"
+    echo "   • Notification: Custom notifications"
+    echo "   • SubagentStop: Subagent completion notifications"
+fi
+
+if [[ "$install_rules" == "y" || "$install_rules" == "Y" ]]; then
+    echo
+    echo -e "${GREEN}✓${NC} Rules Hook:"
+    echo "   • UserPromptSubmit: Validates prompts against project rules"
+    echo "   • PreToolUse: Enforces planning before file changes"
+    echo "   • Stop: Reminds to commit changes"
+    echo "   • SessionStart: Loads project context"
+fi
+
 # Instructions for usage
 echo
 echo -e "${GREEN}=== Installation Complete! ===${NC}"
