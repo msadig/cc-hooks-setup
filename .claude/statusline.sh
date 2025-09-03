@@ -68,6 +68,11 @@ else
 fi
 RESET_COLOR="\033[0m"  # Reset color
 
+# Additional subtle colors for different info types
+TIME_COLOR="\033[36m"      # Cyan for time information
+COST_COLOR="\033[33m"      # Yellow for cost/financial
+METRIC_COLOR="\033[35m"    # Magenta for metrics/tokens
+
 # Format directory display
 PROJECT_NAME="${PROJECT_DIR##*/}"
 CURRENT_NAME="${CURRENT_DIR##*/}"
@@ -112,5 +117,5 @@ fi
 # Build two-line status display
 # Line 1: Keep original format with project/directory info
 echo "[$MODEL_DISPLAY] 🎯 ${PROJECT_DIR##*/}: 📁 ${CURRENT_DIR##*/}${GIT_BRANCH}"
-# Line 2: Enhanced with reset time, cost per hour, and tokens per minute
-echo -e "${CONTEXT_COLOR}Context Remaining: ${CONTEXT_PCT}%${RESET_COLOR} (~${RESET_TIME} until reset at ${RESET_TIME_DISPLAY}) 💰 \$${COST_DISPLAY}${COST_PER_HOUR} 📊 ${ESTIMATED_TOKENS} tok${TPM}"
+# Line 2: Enhanced with reset time, cost per hour, and tokens per minute with subtle colors
+echo -e "${CONTEXT_COLOR}Context Remaining: ${CONTEXT_PCT}%${RESET_COLOR} (~${RESET_TIME} until reset @ ${TIME_COLOR}${RESET_TIME_DISPLAY}${RESET_COLOR}) 💰 ${COST_COLOR}\$${COST_DISPLAY}${COST_PER_HOUR}${RESET_COLOR} 📊 ${METRIC_COLOR}${ESTIMATED_TOKENS} tok${TPM}${RESET_COLOR}"

@@ -62,5 +62,10 @@
         "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/helper_hooks.py notification --announce"
       }]
     }]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "$CLAUDE_PROJECT_DIR/.claude/statusline.sh",
+    "padding": 0
   }
 }
