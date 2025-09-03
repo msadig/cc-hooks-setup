@@ -84,8 +84,33 @@ else
     RESET_TIME="${MINS}m"
 fi
 
+# Calculate actual reset time
+CURRENT_EPOCH=$(date +%s)
+RESET_EPOCH=$((CURRENT_EPOCH + (MINUTES_REMAINING * 60)))
+# Handle both macOS (date -r) and Linux (date -d) formats
+RESET_TIME_DISPLAY=$(date -r $RESET_EPOCH +"%H:%M" 2>/dev/null || date -d "@$RESET_EPOCH" +"%H:%M" 2>/dev/null || echo "??:??")
+
+# Calculate cost per hour if duration is significant
+COST_PER_HOUR=""
+if [ $DURATION_MIN -gt 0 ]; then
+    HOURS_DECIMAL=$(echo "scale=2; $DURATION_MIN / 60" | bc -l 2>/dev/null || echo "0")
+    if (( $(echo "$HOURS_DECIMAL > 0" | bc -l 2>/dev/null || echo "0") )); then
+        HOURLY_RATE=$(echo "scale=2; $TOTAL_COST / $HOURS_DECIMAL" | bc -l 2>/dev/null || echo "0")
+        if (( $(echo "$HOURLY_RATE > 0" | bc -l 2>/dev/null || echo "0") )); then
+            COST_PER_HOUR=" (\$${HOURLY_RATE}/h)"
+        fi
+    fi
+fi
+
+# Calculate tokens per minute if duration is significant
+TPM=""
+if [ $DURATION_MIN -gt 0 ] && [ $ESTIMATED_TOKENS -gt 0 ]; then
+    TOKENS_PER_MIN=$((ESTIMATED_TOKENS / DURATION_MIN))
+    TPM=" (${TOKENS_PER_MIN} tpm)"
+fi
+
 # Build two-line status display
 # Line 1: Keep original format with project/directory info
-echo "[$MODEL_DISPLAY] 🎯 ${PROJECT_DIR##*/}: 📁 ${CURRENT_DIR##*/} ${GIT_BRANCH}"
-# Line 2: Context, cost, and session metrics
-echo -e "${CONTEXT_COLOR}Context Remaining: ${CONTEXT_PCT}%${RESET_COLOR} (~${RESET_TIME} until reset) 💰 \$${COST_DISPLAY} ⏱️ ${DURATION_DISPLAY} 📊 +${LINES_ADDED}/-${LINES_REMOVED}"
+echo "[$MODEL_DISPLAY] 🎯 ${PROJECT_DIR##*/}: 📁 ${CURRENT_DIR##*/}${GIT_BRANCH}"
+# Line 2: Enhanced with reset time, cost per hour, and tokens per minute
+echo -e "${CONTEXT_COLOR}Context Remaining: ${CONTEXT_PCT}%${RESET_COLOR} (~${RESET_TIME} until reset at ${RESET_TIME_DISPLAY}) 💰 \$${COST_DISPLAY}${COST_PER_HOUR} 📊 ${ESTIMATED_TOKENS} tok${TPM}"
