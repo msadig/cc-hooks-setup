@@ -473,8 +473,6 @@ def handle_session_start(input_data):
         ".claude/**/SESSION.md",
         ".claude/**/*-WORKFLOW.md",
         ".claude/**/*-CONTEXT.md",
-        "TODO.md",
-        ".github/ISSUE_TEMPLATE.md"
     ]
     
     # Load project-specific context files with glob pattern matching
