@@ -30,13 +30,13 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 # Import utilities
-from project_utils import (
+from .project_utils import (
     IGNORE_DIRS, PARSEABLE_LANGUAGES, CODE_EXTENSIONS, MARKDOWN_EXTENSIONS,
     infer_file_purpose, get_language_name, should_index_file, get_git_files, 
     load_project_config, find_project_root
 )
 
-from code_parsing import (
+from .code_parsing import (
     extract_python_signatures, extract_javascript_signatures,
     extract_shell_signatures, extract_swift_signatures,
     extract_markdown_structure

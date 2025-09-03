@@ -21,7 +21,6 @@ __version__ = "3.0.0"
 
 import json
 import sys
-import os
 import argparse
 import getpass
 from pathlib import Path
@@ -30,7 +29,7 @@ from datetime import datetime
 # Import shared utilities from utils subdirectory
 sys.path.insert(0, str(Path(__file__).parent / 'utils'))
 
-from project_utils import (
+from utils.indexer.project_utils import (
     # Project utilities
     find_project_root,
     # Git utilities
@@ -322,13 +321,13 @@ It contains information about recent work that should be maintained after compac
 def i_flag_hook():
     """UserPromptSubmit hook for -i and -ic flag detection."""
     # Import the flag hook logic
-    from flag_hook import main as flag_hook_main
+    from utils.indexer.flag_hook import main as flag_hook_main
     flag_hook_main()
 
 def project_index():
     """Run the main project indexer."""
     # Import the project indexer
-    from project_indexer import main as project_indexer_main
+    from utils.indexer.project_indexer import main as project_indexer_main
     project_indexer_main()
 
 # ============================================================================

@@ -21,8 +21,8 @@ from pathlib import Path
 from datetime import datetime
 import pyperclip
 
-from project_utils import find_project_root, should_index_file
-from project_indexer import build_index, convert_to_enhanced_dense_format, compress_if_needed
+from .project_utils import find_project_root, should_index_file
+from .project_indexer import build_index, convert_to_enhanced_dense_format, compress_if_needed
 
 def get_last_interactive_size():
     """Get the last remembered -i size from the index."""
