@@ -226,3 +226,28 @@ The hooks are configured in `.claude/settings.json`. The rule enforcement system
 - **Generic**: Works with any project type
 - **Unified**: Single hook script with flag-based routing
 - **Intelligent**: Suggests specialized agents based on context
+
+## Credits & Inspirations
+
+This project combines and extends ideas from several excellent Claude Code hook implementations:
+
+### 📊 **Project Indexing System**
+- **Inspiration**: [claude-code-project-index](https://github.com/ericbuess/claude-code-project-index/) by Eric Buess
+- **What we adapted**: Comprehensive project mapping, function signatures, call graphs, and dependency analysis
+- **Our enhancements**: Multi-language support, smart caching, flag-based routing, clipboard export
+
+### 🔧 **Dynamic Rule Loading**
+- **Inspiration**: [ai-rules](https://github.com/sahin/ai-rules/) by Sahin
+- **What we adapted**: Keyword-triggered rule loading and context injection
+- **Our enhancements**: Priority-based loading matrix, agent suggestions, plan enforcement, glob pattern matching
+
+### 🛠️ **Helper Hooks Foundation**
+- **Inspiration**: [claude-code-hooks-mastery](https://github.com/disler/claude-code-hooks-mastery) by Disler
+- **What we adapted**: Session logging, notifications, and utility hook patterns
+- **Our enhancements**: Unified hook handler, file tracking, safety validations, TTS announcements
+
+### 🙏 **Special Thanks**
+
+A huge thanks to these developers for sharing their innovative approaches to Claude Code hook systems. Their work provided the foundation and inspiration for building this comprehensive hook ecosystem.
+
+I've combined these approaches into a unified, extensible system that maintains the best aspects of each while adding new capabilities like agent suggestions, glob pattern matching, and priority-based rule loading.
