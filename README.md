@@ -1,9 +1,10 @@
-# Hook-Based Rule Enforcement System with Agent Suggestions
+# Claude Code Hook Ecosystem
 
-A simple, K.I.S.S.-compliant hook system for Claude Code that automatically loads and enforces project-specific rules and suggests specialized agents based on triggered rules.
+A comprehensive hook system for Claude Code featuring rule enforcement, agent suggestions, and intelligent project indexing.
 
-## Features
+## Systems
 
+### 🔧 Rule Enforcement System
 - **Priority-Based Rule Loading**: Rules sorted by priority (critical > high > medium > low)
 - **Smart Context Management**: Shows summaries or full content based on priority and triggers
 - **Always Load Summary**: Critical rules can be configured to always show summaries
@@ -14,32 +15,69 @@ A simple, K.I.S.S.-compliant hook system for Claude Code that automatically load
 - **Auto-Commit Support**: Prompts for testing and committing at session end
 - **Unified Hook Handler**: Single script (`rules_hook.py`) with flag-based routing
 
+### 📊 Indexer Hook System
+- **Automatic Indexing**: Generates comprehensive project maps including directory structure, function signatures, call graphs, and dependencies
+- **Index-Aware Mode**: Use `-i` flag to trigger intelligent code analysis via the index-analyzer subagent  
+- **Clipboard Export**: Use `-ic` flag to export analysis prompts to external AI systems
+- **Multiple Language Support**: Python, JavaScript, TypeScript, Swift, Shell, and Markdown parsing
+- **Smart Caching**: Regenerates indices only when files change or size requirements differ
+- **Hook Integration**: Seamlessly integrates with Claude Code's hook system
+
 ## Installation
 
+### Rule Enforcement System (Already Active)
 1. The hooks are already set up in `.claude/hooks/`
 2. Settings are configured in `.claude/settings.json`
 3. Rules are defined in `.claude/rules/manifest.json`
+
+### Indexer Hook System
+```bash
+# Install the indexer hooks
+./install.sh
+```
+
+The installer will:
+- Verify dependencies (UV and jq)
+- Add indexer hooks to your Claude Code settings
+- Install the `/index` command
+- Install the `index-analyzer` subagent
+
+### Uninstalling Indexer Hooks
+```bash
+# Remove indexer hooks (keeps rule enforcement system)
+./uninstall.sh
+```
 
 ## Directory Structure
 
 ```
 .claude/
 ├── hooks/
-│   ├── rules_hook.py          # Unified hook handler with all functionality
-│   └── test_rules_hook.py     # Test suite for the hook
+│   ├── rules_hook.py             # Rule enforcement and agent suggestions
+│   ├── helper_hooks.py           # Session and utility hooks
+│   ├── indexer_hook.py           # Main indexer with flag routing  
+│   ├── test_indexer_hook.py      # Indexer test suite
+│   └── utils/indexer/
+│       ├── project_utils.py      # Project discovery and Git ops
+│       ├── code_parsing.py       # Multi-language code analysis
+│       ├── flag_hook.py          # Flag detection and processing
+│       ├── project_indexer.py    # Core indexing and compression
+│       └── test_*.py            # Test suites for all modules
+├── agents/
+│   └── index-analyzer.md         # Subagent for codebase analysis
 ├── rules/
-│   ├── manifest.json          # Rule definitions, triggers, and agent integrations
-│   ├── testing-standards.md   # Testing requirements
-│   ├── code-quality.md        # Code quality standards
-│   ├── documentation.md       # Documentation requirements
-│   └── security.md            # Security best practices
-├── sessions/                  # Session-specific runtime state (auto-created)
+│   ├── manifest.json             # Rule definitions and triggers
+│   ├── testing-standards.md      # Testing requirements
+│   ├── code-quality.md           # Code quality standards
+│   ├── documentation.md          # Documentation requirements
+│   └── security.md               # Security best practices
+├── sessions/                     # Session-specific runtime state
 │   └── [session-id]/
-│       ├── current_plan.md    # Current implementation plan
-│       ├── plan_approved      # Approval flag (empty file)
-│       ├── loaded_rules.txt   # Which rules were loaded
-│       └── changed_files.txt  # Files modified in session
-└── settings.json              # Hook configuration
+│       ├── current_plan.md       # Current implementation plan
+│       ├── plan_approved         # Approval flag (empty file)
+│       ├── loaded_rules.txt      # Which rules were loaded
+│       └── changed_files.txt     # Files modified in session
+└── settings.json                 # Hook configuration
 ```
 
 ## How It Works
@@ -68,6 +106,27 @@ At session end, `rules_hook.py --commit-helper`:
 - Reads the list of changed files
 - Prompts Claude to run appropriate tests
 - Requests commit with descriptive message
+
+### 4. Indexer System Usage
+The indexer hooks provide intelligent code analysis:
+
+**Basic Usage:**
+```bash
+# Create/update project index
+/index
+
+# Use index-aware mode for any request
+fix the authentication bug -i
+
+# Export to clipboard for external AI
+analyze the performance bottlenecks -ic50
+```
+
+**How it works:**
+- **UserPromptSubmit**: Detects `-i` and `-ic` flags, generates/loads project index, triggers `index-analyzer` subagent
+- **SessionStart**: Suggests index creation for new projects
+- **PreCompact**: Backs up context state before compaction  
+- **Stop**: Analyzes session and provides insights
 
 ## Rule Loading Matrix
 
