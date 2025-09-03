@@ -118,4 +118,4 @@ fi
 # Line 1: Keep original format with project/directory info
 echo "[$MODEL_DISPLAY] 🎯 ${PROJECT_DIR##*/}: 📁 ${CURRENT_DIR##*/}${GIT_BRANCH}"
 # Line 2: Enhanced with reset time, cost per hour, and tokens per minute with subtle colors
-echo -e "🧠 ${CONTEXT_COLOR}Context Remaining: ${CONTEXT_PCT}% (⏳ ${TIME_COLOR}~${RESET_TIME} until reset @ ${RESET_TIME_DISPLAY}) 💰 ${COST_COLOR}\$${COST_DISPLAY}${COST_PER_HOUR} 📊 ${METRIC_COLOR}${ESTIMATED_TOKENS} tok${TPM}${RESET_COLOR}"
+echo -e "🧠 ${CONTEXT_COLOR}Context Remaining: ${CONTEXT_PCT}% ${TIME_COLOR}(⏳ ~${RESET_TIME} until reset @ ${RESET_TIME_DISPLAY}) ${COST_COLOR}💰 \$${COST_DISPLAY}${COST_PER_HOUR} 📊 ${METRIC_COLOR}${ESTIMATED_TOKENS} tok${TPM}${RESET_COLOR}"
