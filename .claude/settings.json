@@ -4,6 +4,15 @@
       "hooks": [{
         "type": "command",
         "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --prompt-validator"
+      }, {
+        "type": "command",
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/helper_hooks.py user_prompt_submit --add-context"
+      }]
+    }],
+    "SessionStart": [{
+      "hooks": [{
+        "type": "command",
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/helper_hooks.py session_start --load-context --announce"
       }]
     }],
     "PreToolUse": [{
@@ -12,11 +21,45 @@
         "type": "command",
         "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --plan-enforcer"
       }]
+    }, {
+      "matcher": "Bash",
+      "hooks": [{
+        "type": "command",
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/helper_hooks.py pre_tool_use --log"
+      }]
+    }],
+    "PostToolUse": [{
+      "matcher": "*",
+      "hooks": [{
+        "type": "command",
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/helper_hooks.py post_tool_use"
+      }]
+    }],
+    "PreCompact": [{
+      "hooks": [{
+        "type": "command",
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/helper_hooks.py pre_compact --backup --verbose"
+      }]
     }],
     "Stop": [{
       "hooks": [{
         "type": "command",
         "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --commit-helper"
+      }, {
+        "type": "command",
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/helper_hooks.py stop --announce"
+      }]
+    }],
+    "SubagentStop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/helper_hooks.py subagent_stop --announce"
+      }]
+    }],
+    "Notification": [{
+      "hooks": [{
+        "type": "command",
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/helper_hooks.py notification --announce"
       }]
     }]
   }
