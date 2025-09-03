@@ -157,31 +157,7 @@ def validate_prompt(prompt):
     return True, None
 
 
-def add_context_information():
-    """Add context information to the user prompt (case-insensitive file matching)."""
-    context_files = [
-        "docs/RULES.md",
-        "docs/MEMORY.md",
-        "docs/REQUIREMENTS.md",
-        ".claude/RULES.md",
-        ".claude/MEMORY.md",
-        ".claude/REQUIREMENTS.md",
-    ]
-    context_parts = []
-
-    for file_path in context_files:
-        dir_path = CLAUDE_PROJECT_DIR / Path(file_path).parent
-        target_name = Path(file_path).name.lower()
-        if dir_path.exists():
-            # List all files in the directory and match case-insensitively
-            for entry in dir_path.iterdir():
-                if entry.is_file() and entry.name.lower() == target_name:
-                    with open(entry, 'r') as f:
-                        context_content = f.read().strip()
-                        context_parts.append(f"Context from {entry.relative_to(CLAUDE_PROJECT_DIR)}:\n{context_content}")
-                    break  # Only load the first match
-
-    return "\n".join(context_parts)
+# Context loading functionality has been migrated to rules_hook.py
 
 
 def handle_user_prompt_submit(args, input_data):
@@ -193,9 +169,8 @@ def handle_user_prompt_submit(args, input_data):
     # Log the user prompt
     log_to_json('user_prompt_submit', input_data)
 
-    # Add context information (optional)
-    if args.add_context:
-        print(add_context_information())
+    # Context loading has been migrated to rules_hook.py
+    # Use rules_hook.py with --prompt-validator flag for context loading
 
     # Validate prompt if requested and not in log-only mode
     if args.validate and not args.log_only:

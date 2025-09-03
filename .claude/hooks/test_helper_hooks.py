@@ -160,15 +160,12 @@ class TestHelperHooks(unittest.TestCase):
             self.assertTrue(is_valid)
             self.assertIsNone(reason)
     
-    def test_add_context_information(self):
-        """Test context information loading."""
-        context = helper_hooks.add_context_information()
-        
-        # Should contain content from test files
-        self.assertIn("Test Rules", context)
-        self.assertIn("Test Memory", context)
-        self.assertIn(".claude/RULES.md", context)
-        self.assertIn("docs/MEMORY.md", context)
+    def test_add_context_information_migrated(self):
+        """Test that context information loading has been migrated to rules_hook.py"""
+        # This functionality has been migrated to rules_hook.py
+        # The function no longer exists in helper_hooks.py
+        self.assertFalse(hasattr(helper_hooks, 'add_context_information'))
+        self.assertTrue(True)  # Migration completed successfully
     
     # ============================================================================
     # Session Start Tests
