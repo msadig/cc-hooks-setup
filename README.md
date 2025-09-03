@@ -4,6 +4,15 @@ A comprehensive hook system for Claude Code featuring rule enforcement, agent su
 
 ## Systems
 
+### 📊 Enhanced Status Line
+- **Two-Line Display**: Project/directory info on line 1, metrics on line 2
+- **Context Tracking**: Visual percentage with color coding (green/yellow/red)
+- **Time Estimation**: Shows time until context reset and actual reset time
+- **Cost Analysis**: Displays total cost and hourly rate
+- **Token Metrics**: Shows total tokens used and tokens per minute
+- **Subtle Color Scheme**: Cyan for time, yellow for cost, magenta for metrics
+- **Visual Indicators**: 🧠 for context, ⏳ for time, 💰 for cost, 📊 for metrics
+
 ### 🔧 Rule Enforcement System
 - **Priority-Based Rule Loading**: Rules sorted by priority (critical > high > medium > low)
 - **Smart Context Management**: Shows summaries or full content based on priority and triggers
@@ -26,10 +35,15 @@ A comprehensive hook system for Claude Code featuring rule enforcement, agent su
 
 ## Installation
 
+### Prerequisites
+- **UV**: Python package and project manager ([installation guide](https://github.com/astral-sh/uv))
+- **jq**: JSON processor (for indexer functionality)
+
 ### Rule Enforcement System (Already Active)
 1. The hooks are already set up in `.claude/hooks/`
 2. Settings are configured in `.claude/settings.json`
 3. Rules are defined in `.claude/rules/manifest.json`
+4. All Python hooks use `uv run` for execution
 
 ### Indexer Hook System
 ```bash
@@ -54,6 +68,7 @@ The installer will:
 
 ```
 .claude/
+├── statusline.sh                 # Enhanced two-line status display
 ├── hooks/
 │   ├── rules_hook.py             # Rule enforcement and agent suggestions
 │   ├── helper_hooks.py           # Session and utility hooks
@@ -255,10 +270,20 @@ For more details, see [AGENT_RECOMMENDATIONS.md](./AGENT_RECOMMENDATIONS.md)
 
 ## Testing
 
-Run the test suite:
+Run the test suite using UV (Python package manager):
 ```bash
-python3 .claude/hooks/test_rules_hook.py  # Complete test suite for all functionality
+# Test rule enforcement and hook system
+uv run .claude/hooks/test_rules_hook.py
+
+# Test indexer functionality
+uv run .claude/hooks/test_indexer_hook.py
+
+# Run specific test modules
+uv run .claude/hooks/utils/indexer/test_project_utils.py
+uv run .claude/hooks/utils/indexer/test_code_parsing.py
 ```
+
+**Note**: All Python scripts in this project use `uv` for dependency management and execution.
 
 ## Manual Workflow
 
@@ -269,7 +294,17 @@ python3 .claude/hooks/test_rules_hook.py  # Complete test suite for all function
 
 ## Configuration
 
-The hooks are configured in `.claude/settings.json` with a unified approach:
+The hooks and statusline are configured in `.claude/settings.json` with a unified approach:
+
+### Status Line Configuration
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/statusline.sh"
+  }
+}
+```
 
 ### Current Hook Configuration
 ```json
