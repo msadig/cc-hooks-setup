@@ -86,7 +86,7 @@ fi
 cp "$SETTINGS_FILE" "${SETTINGS_FILE}.backup"
 
 # Update hooks using jq - adds indexer hooks to existing structure
-jq --arg project_root "$PROJECT_ROOT" '
+jq --arg indexer_script "$INDEXER_SCRIPT" '
   # Initialize hooks if not present
   if .hooks == null then .hooks = {} else . end |
   
@@ -95,7 +95,7 @@ jq --arg project_root "$PROJECT_ROOT" '
   .hooks.UserPromptSubmit += [{
     "hooks": [{
       "type": "command",
-      "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/indexer_hook.py --i-flag-hook",
+      "command": ("uv run " + $indexer_script + " --i-flag-hook"),
       "timeout": 20
     }]
   }] |
@@ -105,7 +105,7 @@ jq --arg project_root "$PROJECT_ROOT" '
   .hooks.SessionStart += [{
     "hooks": [{
       "type": "command", 
-      "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/indexer_hook.py --session-start",
+      "command": ("uv run " + $indexer_script + " --session-start"),
       "timeout": 5
     }]
   }] |
@@ -115,7 +115,7 @@ jq --arg project_root "$PROJECT_ROOT" '
   .hooks.PreCompact += [{
     "hooks": [{
       "type": "command",
-      "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/indexer_hook.py --precompact", 
+      "command": ("uv run " + $indexer_script + " --precompact"), 
       "timeout": 15
     }]
   }] |
@@ -125,7 +125,7 @@ jq --arg project_root "$PROJECT_ROOT" '
   .hooks.Stop += [{
     "hooks": [{
       "type": "command",
-      "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/indexer_hook.py --stop",
+      "command": ("uv run " + $indexer_script + " --stop"),
       "timeout": 45
     }]
   }]
@@ -184,7 +184,7 @@ When you run \`/index\`, Claude will:
 4. The index is then available as PROJECT_INDEX.json
 
 The script to run is:
-\`uv run \$CLAUDE_PROJECT_DIR/.claude/hooks/indexer_hook.py --project-index\`
+\`uv run $INDEXER_SCRIPT --project-index\`
 
 ## Troubleshooting
 
@@ -237,7 +237,11 @@ echo "   • The index is created automatically when you use -i flag"
 echo
 echo "📝 Manual usage:"
 echo "   • Command: /index (in Claude Code)"
-echo "   • Direct: uv run $PROJECT_ROOT/.claude/hooks/indexer_hook.py --project-index"
+echo "   • Direct: uv run $INDEXER_SCRIPT --project-index"
 echo "   Both create PROJECT_INDEX.json in the current directory"
+echo
+echo "📍 Global hooks installed with absolute paths:"
+echo "   • All hooks point to: $INDEXER_SCRIPT"
+echo "   • Works from any project directory"
 echo
 echo -e "${BLUE}Happy coding with the Indexer Hook!${NC}"

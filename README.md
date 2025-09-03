@@ -38,9 +38,10 @@ A comprehensive hook system for Claude Code featuring rule enforcement, agent su
 
 The installer will:
 - Verify dependencies (UV and jq)
-- Add indexer hooks to your Claude Code settings
-- Install the `/index` command
-- Install the `index-analyzer` subagent
+- Add indexer hooks to your global Claude Code settings (~/.claude/settings.json)
+- Use absolute paths to this project's indexer script
+- Install the `/index` command globally
+- Install the `index-analyzer` subagent globally
 
 ### Uninstalling Indexer Hooks
 ```bash
@@ -216,7 +217,7 @@ python3 .claude/hooks/test_rules_hook.py  # Complete test suite for all function
 
 ## Configuration
 
-The hooks are configured in `.claude/settings.json`. The system uses `$CLAUDE_PROJECT_DIR` environment variable to ensure all paths work regardless of Claude's current directory.
+The hooks are configured in `.claude/settings.json`. The rule enforcement system uses `$CLAUDE_PROJECT_DIR` environment variable, while the indexer system uses absolute paths to ensure global availability.
 
 ## Principles
 
