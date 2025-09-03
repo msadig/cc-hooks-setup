@@ -352,25 +352,6 @@ def load_development_context(source):
         # Last commit
         if git_info.get('last_commit'):
             context_parts.append(f"{BLUE}   Last commit: {NC}{git_info['last_commit']}")
-
-    # Load project-specific context files if they exist
-    context_files = [
-        ".claude/CONTEXT.md",
-        ".claude/TODO.md",
-        "TODO.md",
-        ".github/ISSUE_TEMPLATE.md"
-    ]
-    
-    for file_path in context_files:
-        if Path(CLAUDE_PROJECT_DIR / file_path).exists():
-            try:
-                with open(CLAUDE_PROJECT_DIR / file_path, 'r') as f:
-                    content = f.read().strip()
-                    if content:
-                        context_parts.append(f"{CYAN}\n--- Content from {file_path} ---{NC}")
-                        context_parts.append(content[:1000])  # Limit to first 1000 chars
-            except Exception:
-                pass
     
     # Add recent issues if available
     issues = get_recent_issues()
