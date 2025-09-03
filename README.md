@@ -7,13 +7,14 @@ A comprehensive hook system for Claude Code featuring rule enforcement, agent su
 ### 🔧 Rule Enforcement System
 - **Priority-Based Rule Loading**: Rules sorted by priority (critical > high > medium > low)
 - **Smart Context Management**: Shows summaries or full content based on priority and triggers
-- **Always Load Summary**: Critical rules can be configured to always show summaries
 - **Intelligent Agent Suggestions**: Automatically recommends specialized agents based on triggered rules
+- **Glob Pattern Context Loading**: Flexible file discovery using .gitignore-like patterns (`.claude/**/WORKFLOW.md`, `.claude/**/*-CONTEXT.md`)
+- **Consolidated Context Loading**: Unified approach for both UserPromptSubmit and SessionStart hooks
 - **Plan Enforcement**: Requires approved plans before code modifications
 - **File Tracking**: Tracks all modified files for testing and commit
 - **Generic Testing**: Works with any project type (JavaScript, Python, Go, etc.)
 - **Auto-Commit Support**: Prompts for testing and committing at session end
-- **Unified Hook Handler**: Single script (`rules_hook.py`) with flag-based routing
+- **Unified Hook Handler**: Single script (`rules_hook.py`) with flag-based routing (`--prompt-validator`, `--session-start`, `--plan-enforcer`, `--commit-helper`)
 
 ### 📊 Indexer Hook System
 - **Automatic Indexing**: Generates comprehensive project maps including directory structure, function signatures, call graphs, and dependencies
@@ -83,30 +84,35 @@ The installer will:
 
 ## How It Works
 
-### 1. Priority-Based Rule Loading with Agent Suggestions (UserPromptSubmit)
-When you submit a prompt, `rules_hook.py --prompt-validator`:
-- Checks for keywords in your prompt
-- Sorts rules by priority (critical > high > medium > low)
-- Loads rules based on the loading matrix:
-  - **Critical**: Always shows summary, full content if triggered or `always_load_summary=true`
-  - **High**: Shows summary if triggered, full content based on configuration
-  - **Medium**: Shows summary only when triggered
-  - **Low**: Shows reference only when triggered
-- Displays a priority summary table
-- **Suggests specialized agents** (see [How Agent Recommendations Work](#how-agent-recommendations-work) below)
-- Injects appropriate content as context for Claude
+### 1. Consolidated Context Loading & Rule System
+
+**UserPromptSubmit** (`rules_hook.py --prompt-validator`):
+- **Primary Context Files**: Uses glob patterns to find context files:
+  - `docs/**/RULES.md`, `docs/**/MEMORY.md`, `docs/**/REQUIREMENTS.md`
+  - `.claude/**/RULES.md`, `.claude/**/MEMORY.md`, `.claude/**/REQUIREMENTS.md`
+- **Rule Processing**: Checks keywords, sorts by priority, applies loading matrix
+- **Agent Suggestions**: Automatically recommends specialized agents based on triggered rules
+- **Context Injection**: Provides unified context to Claude
+
+**SessionStart** (`rules_hook.py --session-start`):
+- **Project Context Files**: Uses glob patterns to discover:
+  - `.claude/**/CONTEXT.md`, `.claude/**/WORKFLOW.md`, `.claude/**/SESSION.md`
+  - `.claude/**/*-WORKFLOW.md`, `.claude/**/*-CONTEXT.md`
+  - `TODO.md`, `.github/ISSUE_TEMPLATE.md`
+- **Session Information**: Provides session details and project context
+- **TTS Announcements**: Works with `helper_hooks.py` for audio notifications
 
 ### 2. Plan Enforcement (PreToolUse)
-Before any file modification, `rules_hook.py --plan-enforcer`:
-- Checks if a plan exists in `.claude/sessions/[session-id]/current_plan.md`
-- Verifies the plan is approved (`.claude/sessions/[session-id]/plan_approved` exists)
-- Tracks modified files to `.claude/sessions/[session-id]/changed_files.txt`
+Before file modifications, `rules_hook.py --plan-enforcer`:
+- Checks for approved plans in session directories
+- Tracks all modified files for later processing
+- Prevents modifications without proper planning
 
-### 3. Testing & Commit (Stop)
+### 3. Commit Assistance (Stop)
 At session end, `rules_hook.py --commit-helper`:
-- Reads the list of changed files
-- Prompts Claude to run appropriate tests
-- Requests commit with descriptive message
+- Reviews all changed files tracked during the session
+- Prompts for appropriate testing and validation
+- Assists with descriptive commit messages
 
 ### 4. Indexer System Usage
 The indexer hooks provide intelligent code analysis:
@@ -128,6 +134,52 @@ analyze the performance bottlenecks -ic50
 - **SessionStart**: Suggests index creation for new projects
 - **PreCompact**: Backs up context state before compaction  
 - **Stop**: Analyzes session and provides insights
+
+## Glob Pattern Context Loading
+
+The system uses .gitignore-like glob patterns for flexible context file discovery:
+
+### Primary Context Files (UserPromptSubmit)
+```yaml
+Primary patterns (always loaded):
+- "docs/**/RULES.md"           # Find RULES.md anywhere under docs/
+- "docs/**/MEMORY.md"          # Find MEMORY.md anywhere under docs/
+- "docs/**/REQUIREMENTS.md"    # Find REQUIREMENTS.md anywhere under docs/
+- ".claude/**/RULES.md"        # Find RULES.md anywhere under .claude/
+- ".claude/**/MEMORY.md"       # Find MEMORY.md anywhere under .claude/
+- ".claude/**/REQUIREMENTS.md" # Find REQUIREMENTS.md anywhere under .claude/
+```
+
+### Project Context Files (SessionStart)
+```yaml
+Project patterns (session context):
+- ".claude/**/CONTEXT.md"      # Find CONTEXT.md anywhere under .claude/
+- ".claude/**/WORKFLOW.md"     # Find WORKFLOW.md anywhere under .claude/
+- ".claude/**/SESSION.md"      # Find SESSION.md anywhere under .claude/
+- ".claude/**/*-WORKFLOW.md"   # Find files ending with -WORKFLOW.md
+- ".claude/**/*-CONTEXT.md"    # Find files ending with -CONTEXT.md
+- "TODO.md"                    # Exact match for root TODO.md
+- ".github/ISSUE_TEMPLATE.md"  # Exact match for issue template
+```
+
+### Benefits of Glob Patterns
+- **Flexible Organization**: Context files can be organized in subdirectories
+- **Naming Conventions**: Support for prefixes/suffixes (e.g., `team-WORKFLOW.md`)
+- **Recursive Discovery**: `**` wildcard searches all subdirectory levels
+- **Deduplication**: Automatic handling of files matched by multiple patterns
+- **Consistent Ordering**: Files are sorted alphabetically for predictable output
+
+### Example File Organization
+```
+.claude/
+├── WORKFLOW.md              # Matches .claude/**/WORKFLOW.md
+├── team/
+│   ├── dev-WORKFLOW.md      # Matches .claude/**/*-WORKFLOW.md
+│   └── CONTEXT.md           # Matches .claude/**/CONTEXT.md
+└── projects/
+    └── api/
+        └── SESSION.md       # Matches .claude/**/SESSION.md
+```
 
 ## Rule Loading Matrix
 
@@ -217,7 +269,58 @@ python3 .claude/hooks/test_rules_hook.py  # Complete test suite for all function
 
 ## Configuration
 
-The hooks are configured in `.claude/settings.json`. The rule enforcement system uses `$CLAUDE_PROJECT_DIR` environment variable, while the indexer system uses absolute paths to ensure global availability.
+The hooks are configured in `.claude/settings.json` with a unified approach:
+
+### Current Hook Configuration
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [{
+      "hooks": [{
+        "type": "command",
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --prompt-validator"
+      }]
+    }],
+    "SessionStart": [{
+      "hooks": [{
+        "type": "command",
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --session-start"
+      }, {
+        "type": "command",
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/helper_hooks.py session_start --announce"
+      }]
+    }],
+    "PreToolUse": [{
+      "matcher": "Write|Edit|MultiEdit",
+      "hooks": [{
+        "type": "command",
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --plan-enforcer"
+      }]
+    }, {
+      "matcher": "Bash",
+      "hooks": [{
+        "type": "command",
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/helper_hooks.py pre_tool_use --log"
+      }]
+    }],
+    "Stop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --commit-helper"
+      }, {
+        "type": "command",
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/helper_hooks.py stop --announce"
+      }]
+    }]
+  }
+}
+```
+
+### Hook Architecture
+- **Unified Handler**: `rules_hook.py` handles all rule enforcement, context loading, plan enforcement, and commit assistance
+- **Helper Functions**: `helper_hooks.py` provides logging, notifications, and TTS announcements
+- **Flag-Based Routing**: Single script with specific flags for different hook events
+- **Environment Variables**: Uses `$CLAUDE_PROJECT_DIR` for project-relative paths
 
 ## Principles
 
