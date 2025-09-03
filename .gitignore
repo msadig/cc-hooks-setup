@@ -1,3 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.bak
+*_old.py
+*_backup.py
+
+# Test outputs
+tests/
+debug_*.py
+
+# Settings backups
+settings.json.backup*
+
+# Runtime configuration
+.python_cmd
+.clipboard_content.txt
+
 logs/*
 .claude/session/*
 .claude/sessions/
