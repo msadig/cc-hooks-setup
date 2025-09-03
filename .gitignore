@@ -38,3 +38,4 @@ logs/*
 .claude/session/*
 .claude/sessions/
 PROJECT_INDEX.json
+.claude-code-sadigmuradov/
