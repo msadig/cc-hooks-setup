@@ -18,7 +18,7 @@ GIT_BRANCH=""
 if git rev-parse --git-dir > /dev/null 2>&1; then
     BRANCH=$(git branch --show-current 2>/dev/null)
     if [ -n "$BRANCH" ]; then
-        GIT_BRANCH="🌿 $BRANCH "
+        GIT_BRANCH=" | 🌿 $BRANCH "
     fi
 fi
 
@@ -84,5 +84,8 @@ else
     RESET_TIME="${MINS}m"
 fi
 
-# Build comprehensive status line
-echo -e "[$MODEL_DISPLAY] $DIR_DISPLAY ${GIT_BRANCH}${CONTEXT_COLOR}Context: ${CONTEXT_PCT}%${RESET_COLOR} (~${RESET_TIME} until reset) 💰 \$${COST_DISPLAY} ⏱️ ${DURATION_DISPLAY} 📊 +${LINES_ADDED}/-${LINES_REMOVED}"
+# Build two-line status display
+# Line 1: Keep original format with project/directory info
+echo "[$MODEL_DISPLAY] 🎯 ${PROJECT_DIR##*/}: 📁 ${CURRENT_DIR##*/} ${GIT_BRANCH}"
+# Line 2: Context, cost, and session metrics
+echo -e "${CONTEXT_COLOR}Context Remaining: ${CONTEXT_PCT}%${RESET_COLOR} (~${RESET_TIME} until reset) 💰 \$${COST_DISPLAY} ⏱️ ${DURATION_DISPLAY} 📊 +${LINES_ADDED}/-${LINES_REMOVED}"
