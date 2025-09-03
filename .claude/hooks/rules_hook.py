@@ -28,39 +28,42 @@ PRIORITY_ORDER = {
 
 def add_always_load_context():
     """Load critical context files that should always be available."""
-    # Primary context files (case-insensitive matching)
-    primary_context_files = [
-        "docs/RULES.md",
-        "docs/MEMORY.md", 
-        "docs/REQUIREMENTS.md",
-        ".claude/RULES.md",
-        ".claude/MEMORY.md",
-        ".claude/REQUIREMENTS.md",
+    # Primary context files (glob pattern matching)
+    primary_context_patterns = [
+        "docs/**/RULES.md",
+        "docs/**/MEMORY.md", 
+        "docs/**/REQUIREMENTS.md",
+        ".claude/**/RULES.md",
+        ".claude/**/MEMORY.md",
+        ".claude/**/REQUIREMENTS.md",
     ]
     
     context_parts = []
 
-    # Load primary context files with case-insensitive matching
-    for file_path in primary_context_files:
-        dir_path = os.path.join(PROJECT_DIR, os.path.dirname(file_path))
-        target_name = os.path.basename(file_path).lower()
-        
-        if os.path.exists(dir_path):
-            # List all files in the directory and match case-insensitively
-            try:
-                for entry in os.listdir(dir_path):
-                    entry_path = os.path.join(dir_path, entry)
-                    if os.path.isfile(entry_path) and entry.lower() == target_name:
-                        try:
-                            with open(entry_path, 'r') as f:
-                                context_content = f.read().strip()
-                                rel_path = os.path.relpath(entry_path, PROJECT_DIR)
-                                context_parts.append(f"Context from {rel_path}:\n{context_content}")
-                        except IOError:
-                            pass
-                        break  # Only load the first match
-            except OSError:
-                pass
+    # Load primary context files with glob pattern matching
+    import glob
+    matched_primary_files = set()  # Use set to avoid duplicates
+    
+    for pattern in primary_context_patterns:
+        # Use glob to find all files matching the pattern
+        full_pattern = os.path.join(PROJECT_DIR, pattern)
+        try:
+            for matched_path in glob.glob(full_pattern, recursive=True):
+                if os.path.isfile(matched_path):
+                    matched_primary_files.add(matched_path)
+        except (OSError, ValueError):
+            pass  # Skip invalid patterns
+    
+    # Sort files for consistent ordering
+    for full_path in sorted(matched_primary_files):
+        try:
+            with open(full_path, 'r') as f:
+                context_content = f.read().strip()
+                if context_content:
+                    rel_path = os.path.relpath(full_path, PROJECT_DIR)
+                    context_parts.append(f"Context from {rel_path}:\n{context_content}")
+        except IOError:
+            pass
 
     return "\n".join(context_parts)
 
