@@ -16,66 +16,229 @@ NC='\033[0m' # No Color
 PROJECT_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 HOOKS_DIR="$PROJECT_ROOT/.claude/hooks"
 INDEXER_SCRIPT="$HOOKS_DIR/indexer_hook.py"
+HELPER_SCRIPT="$HOOKS_DIR/helper_hooks.py"
+RULES_SCRIPT="$HOOKS_DIR/rules_hook.py"
 AGENTS_DIR="$PROJECT_ROOT/.claude/agents"
+
+# Claude Code configuration
+CLAUDE_CONFIG_DIR="$HOME/.claude"
+SETTINGS_FILE="$CLAUDE_CONFIG_DIR/settings.json"
+
+# Define hook configurations as data
+INDEXER_HOOKS=(
+    "UserPromptSubmit" "--i-flag-hook" 20
+    "SessionStart" "--session-start" 5
+    "PreCompact" "--precompact" 15
+    "Stop" "--stop" 45
+)
+
+HELPER_HOOKS=(
+    "SessionStart" "session_start --load-context" 10
+    "PreToolUse" "pre_tool_use" 5
+    "Stop" "stop --announce" 10
+    "Notification" "notification" 5
+    "SubagentStop" "subagent_stop" 5
+)
+
+RULES_HOOKS=(
+    "UserPromptSubmit" "--prompt-validator" 10
+    "PreToolUse" "--plan-enforcer" 5
+    "Stop" "--commit-helper" 10
+    "SessionStart" "--session-start" 10
+)
+
+# ==================== Helper Functions ====================
+
+# Unified status printing
+print_status() {
+    local type=$1
+    local message=$2
+    case $type in
+        success) echo -e "${GREEN}✓${NC} $message" ;;
+        error)   echo -e "${RED}❌${NC} $message" ;;
+        warning) echo -e "${YELLOW}⚠${NC} $message" ;;
+        info)    echo -e "${BLUE}ℹ${NC} $message" ;;
+    esac
+}
+
+# Check if command exists
+require_command() {
+    local cmd=$1
+    local install_hint=$2
+    
+    if ! command -v "$cmd" &> /dev/null; then
+        print_status error "$cmd is not installed"
+        echo "$install_hint"
+        exit 1
+    fi
+    print_status success "$cmd is installed"
+}
+
+# Validate hook script
+validate_hook_script() {
+    local script=$1
+    local name=$2
+    
+    if [ ! -f "$script" ]; then
+        print_status error "$name script not found at: $script"
+        return 1
+    fi
+    
+    if uv run "$script" --help &> /dev/null; then
+        return 0
+    else
+        print_status warning "Could not verify $name, but continuing"
+        return 2
+    fi
+}
+
+# Create timestamped backup
+create_timestamped_backup() {
+    local timestamp=$(date +"%Y%m%d_%H%M%S")
+    local backup_file="${SETTINGS_FILE}.backup.${timestamp}"
+    
+    cp "$SETTINGS_FILE" "$backup_file"
+    print_status success "Backup created: $backup_file"
+    
+    # Keep only last 3 backups
+    ls -t "${SETTINGS_FILE}.backup."* 2>/dev/null | tail -n +4 | xargs -r rm
+}
+
+# Check if a specific hook already exists
+hook_exists() {
+    local hook_type=$1
+    local script_path=$2
+    local command_args=$3
+    
+    # Check if settings file exists
+    if [[ ! -f "$SETTINGS_FILE" ]]; then
+        echo "false"
+        return
+    fi
+    
+    # Updated to handle grouped structure - checks all hooks in all groups
+    jq --arg type "$hook_type" \
+       --arg cmd "uv run $script_path $command_args" \
+       '
+       .hooks[$type] // [] |
+       # Flatten all hooks from all groups
+       map(.hooks[]?) |
+       # Check if any hook matches the command
+       any(.command == $cmd)
+       ' "$SETTINGS_FILE"
+}
+
+# Add hooks to settings with duplicate detection
+add_hooks_to_settings() {
+    local script_path=$1
+    local hook_name=$2
+    shift 2
+    
+    local hooks_added=0
+    local hooks_skipped=0
+    
+    echo "Installing $hook_name..."
+    
+    # Process hooks in groups of 3 (type, args, timeout)
+    while [ $# -gt 0 ]; do
+        local hook_type=$1
+        local command_args=$2
+        local timeout=$3
+        shift 3
+        
+        # Check if this hook already exists
+        if [[ $(hook_exists "$hook_type" "$script_path" "$command_args") == "true" ]]; then
+            echo "   • $hook_type hook already exists, skipping"
+            ((hooks_skipped++))
+            continue
+        fi
+        
+        # Add the hook to existing group or create new one
+        jq --arg type "$hook_type" \
+           --arg cmd "uv run $script_path $command_args" \
+           --argjson timeout "$timeout" \
+           '
+           # Initialize hooks object and type array if needed
+           if .hooks == null then .hooks = {} else . end |
+           if .hooks[$type] == null then .hooks[$type] = [] else . end |
+           
+           # Find index of first group without matcher - for hooks that do not use matchers
+           (.hooks[$type] | to_entries | map(select(.value | has("matcher") | not)) | first // null | .key // null) as $group_index |
+           
+           if $group_index != null then
+               # Append to existing group without matcher
+               .hooks[$type][$group_index].hooks += [{
+                   "type": "command",
+                   "command": $cmd,
+                   "timeout": $timeout
+               }]
+           else
+               # Create new group without matcher
+               .hooks[$type] += [{
+                   "hooks": [{
+                       "type": "command",
+                       "command": $cmd,
+                       "timeout": $timeout
+                   }]
+               }]
+           end
+           ' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && \
+        mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+        
+        echo "   ✓ Added $hook_type hook"
+        ((hooks_added++))
+    done
+    
+    # Report results
+    if [ $hooks_added -gt 0 ]; then
+        print_status success "$hook_name: Added $hooks_added new hooks"
+    fi
+    if [ $hooks_skipped -gt 0 ]; then
+        print_status info "$hook_name: Skipped $hooks_skipped existing hooks"
+    fi
+    
+    return 0
+}
+
+# ==================== Main Installation ====================
 
 echo -e "${BLUE}=== Indexer Hook Installation ===${NC}"
 echo
 
-# Check if UV is installed
-if ! command -v uv &> /dev/null; then
-    echo -e "${RED}❌ UV is not installed${NC}"
-    echo "Please install UV first:"
-    echo "  curl -LsSf https://astral.sh/uv/install.sh | sh"
-    echo "  or"
-    echo "  brew install uv"
-    exit 1
-fi
+# Check dependencies
+echo "Checking dependencies..."
+require_command "uv" "Please install UV first:
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  or
+  brew install uv"
 
-echo -e "${GREEN}✓${NC} UV is installed"
-
-# Check for jq
-if ! command -v jq &> /dev/null; then
-    echo -e "${RED}❌ jq is not installed${NC}"
-    echo "Please install jq first:"
-    echo "  brew install jq  # on macOS"
-    echo "  apt-get install jq  # on Ubuntu/Debian"
-    exit 1
-fi
-
-echo -e "${GREEN}✓${NC} jq is installed"
+require_command "jq" "Please install jq first:
+  brew install jq  # on macOS
+  apt-get install jq  # on Ubuntu/Debian"
 
 # Check for Claude Code configuration directory
-CLAUDE_CONFIG_DIR="$HOME/.claude"
-SETTINGS_FILE="$CLAUDE_CONFIG_DIR/settings.json"
-
 if [ ! -d "$CLAUDE_CONFIG_DIR" ]; then
     echo -e "${YELLOW}Creating Claude Code config directory...${NC}"
     mkdir -p "$CLAUDE_CONFIG_DIR"
 fi
-
-echo -e "${GREEN}✓${NC} Claude Code directory exists"
+print_status success "Claude Code directory exists"
 
 # Verify project structure
 if [ ! -f "$INDEXER_SCRIPT" ]; then
-    echo -e "${RED}❌ Indexer script not found at: $INDEXER_SCRIPT${NC}"
+    print_status error "Indexer script not found at: $INDEXER_SCRIPT"
     echo "Make sure you're running this from the project root directory"
     exit 1
 fi
-
-echo -e "${GREEN}✓${NC} Project structure verified"
+print_status success "Project structure verified"
 
 # Test UV can run the indexer script
 echo
 echo "Testing UV execution..."
 if uv run "$INDEXER_SCRIPT" --help &> /dev/null; then
-    echo -e "${GREEN}✓${NC} UV can execute indexer script"
+    print_status success "UV can execute indexer script"
 else
-    echo -e "${YELLOW}⚠${NC} UV test failed, but hooks may still work"
+    print_status warning "UV test failed, but hooks may still work"
 fi
-
-# Update hooks in settings.json
-echo
-echo "Configuring hooks..."
 
 # Ensure settings.json exists
 if [[ ! -f "$SETTINGS_FILE" ]]; then
@@ -83,55 +246,14 @@ if [[ ! -f "$SETTINGS_FILE" ]]; then
 fi
 
 # Create a backup
-cp "$SETTINGS_FILE" "${SETTINGS_FILE}.backup"
+echo
+echo "Creating backup..."
+create_timestamped_backup
 
-# Update hooks using jq - adds indexer hooks to existing structure
-jq --arg indexer_script "$INDEXER_SCRIPT" '
-  # Initialize hooks if not present
-  if .hooks == null then .hooks = {} else . end |
-  
-  # Add UserPromptSubmit hook for -i flag detection (append to existing)
-  if .hooks.UserPromptSubmit == null then .hooks.UserPromptSubmit = [] else . end |
-  .hooks.UserPromptSubmit += [{
-    "hooks": [{
-      "type": "command",
-      "command": ("uv run " + $indexer_script + " --i-flag-hook"),
-      "timeout": 20
-    }]
-  }] |
-  
-  # Add SessionStart hook for automatic indexing (append to existing) 
-  if .hooks.SessionStart == null then .hooks.SessionStart = [] else . end |
-  .hooks.SessionStart += [{
-    "hooks": [{
-      "type": "command", 
-      "command": ("uv run " + $indexer_script + " --session-start"),
-      "timeout": 5
-    }]
-  }] |
-  
-  # Add PreCompact hook (append to existing)
-  if .hooks.PreCompact == null then .hooks.PreCompact = [] else . end |
-  .hooks.PreCompact += [{
-    "hooks": [{
-      "type": "command",
-      "command": ("uv run " + $indexer_script + " --precompact"), 
-      "timeout": 15
-    }]
-  }] |
-  
-  # Add Stop hook (append to existing)
-  if .hooks.Stop == null then .hooks.Stop = [] else . end |
-  .hooks.Stop += [{
-    "hooks": [{
-      "type": "command",
-      "command": ("uv run " + $indexer_script + " --stop"),
-      "timeout": 45
-    }]
-  }]
-' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
-
-echo -e "${GREEN}✓${NC} Hooks configured in settings.json"
+# Install indexer hooks (always installed)
+echo
+echo "Configuring indexer hooks..."
+add_hooks_to_settings "$INDEXER_SCRIPT" "Indexer" "${INDEXER_HOOKS[@]}"
 
 # Create /index command
 echo
@@ -194,7 +316,7 @@ If the index is too large for your project, ask Claude:
 For other issues, the tool is designed to be customized - just describe your problem to Claude!
 EOF
 
-echo -e "${GREEN}✓${NC} Created /index command"
+print_status success "Created /index command"
 
 # Install index-analyzer subagent
 echo
@@ -202,12 +324,11 @@ echo "Installing index-analyzer subagent..."
 GLOBAL_AGENTS_DIR="$HOME/.claude/agents"
 mkdir -p "$GLOBAL_AGENTS_DIR"
 
-# Copy the index-analyzer agent if it exists
 if [ -f "$AGENTS_DIR/index-analyzer.md" ]; then
     cp "$AGENTS_DIR/index-analyzer.md" "$GLOBAL_AGENTS_DIR/index-analyzer.md"
-    echo -e "${GREEN}✓${NC} Installed index-analyzer subagent to $GLOBAL_AGENTS_DIR"
+    print_status success "Installed index-analyzer subagent to $GLOBAL_AGENTS_DIR"
 else
-    echo -e "${YELLOW}⚠${NC} index-analyzer.md not found in $AGENTS_DIR/"
+    print_status warning "index-analyzer.md not found in $AGENTS_DIR/"
     echo "   The -i flag may not work properly without this subagent"
 fi
 
@@ -215,9 +336,9 @@ fi
 echo
 echo "Testing installation..."
 if uv run "$INDEXER_SCRIPT" --version 2>/dev/null | grep -q "3.0.0"; then
-    echo -e "${GREEN}✓${NC} Installation test passed"
+    print_status success "Installation test passed"
 else
-    echo -e "${YELLOW}⚠${NC} Version check failed, but installation completed"
+    print_status warning "Version check failed, but installation completed"
     echo "   You can still use the hooks normally"
 fi
 
@@ -240,72 +361,8 @@ echo
 read -p "Install Helper Hooks? (y/n): " install_helper
 
 if [[ "$install_helper" == "y" || "$install_helper" == "Y" ]]; then
-    HELPER_SCRIPT="$HOOKS_DIR/helper_hooks.py"
-    
-    if [ ! -f "$HELPER_SCRIPT" ]; then
-        echo -e "${RED}❌ Helper hooks script not found at: $HELPER_SCRIPT${NC}"
-    else
-        # Test if helper_hooks.py is executable
-        if uv run "$HELPER_SCRIPT" --help &> /dev/null; then
-            echo "Installing Helper Hooks..."
-            
-            # Update settings.json with helper hooks
-            jq --arg helper_script "$HELPER_SCRIPT" '
-              # Add SessionStart hook for git status and context
-              if .hooks.SessionStart == null then .hooks.SessionStart = [] else . end |
-              .hooks.SessionStart += [{
-                "hooks": [{
-                  "type": "command",
-                  "command": ("uv run " + $helper_script + " session_start --load-context"),
-                  "timeout": 10
-                }]
-              }] |
-              
-              # Add PreToolUse hook for safety checks
-              if .hooks.PreToolUse == null then .hooks.PreToolUse = [] else . end |
-              .hooks.PreToolUse += [{
-                "hooks": [{
-                  "type": "command",
-                  "command": ("uv run " + $helper_script + " pre_tool_use"),
-                  "timeout": 5
-                }]
-              }] |
-              
-              # Add Stop hook for notifications
-              if .hooks.Stop == null then .hooks.Stop = [] else . end |
-              .hooks.Stop += [{
-                "hooks": [{
-                  "type": "command",
-                  "command": ("uv run " + $helper_script + " stop --announce"),
-                  "timeout": 10
-                }]
-              }] |
-              
-              # Add Notification hook
-              if .hooks.Notification == null then .hooks.Notification = [] else . end |
-              .hooks.Notification += [{
-                "hooks": [{
-                  "type": "command",
-                  "command": ("uv run " + $helper_script + " notification"),
-                  "timeout": 5
-                }]
-              }] |
-              
-              # Add SubagentStop hook
-              if .hooks.SubagentStop == null then .hooks.SubagentStop = [] else . end |
-              .hooks.SubagentStop += [{
-                "hooks": [{
-                  "type": "command",
-                  "command": ("uv run " + $helper_script + " subagent_stop"),
-                  "timeout": 5
-                }]
-              }]
-            ' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
-            
-            echo -e "${GREEN}✓${NC} Helper Hooks installed successfully"
-        else
-            echo -e "${YELLOW}⚠${NC} Could not verify helper_hooks.py, skipping installation"
-        fi
+    if validate_hook_script "$HELPER_SCRIPT" "Helper hooks"; then
+        add_hooks_to_settings "$HELPER_SCRIPT" "Helper" "${HELPER_HOOKS[@]}"
     fi
 else
     echo "Skipping Helper Hooks installation"
@@ -324,70 +381,15 @@ echo
 read -p "Install Rules Hook? (y/n): " install_rules
 
 if [[ "$install_rules" == "y" || "$install_rules" == "Y" ]]; then
-    RULES_SCRIPT="$HOOKS_DIR/rules_hook.py"
-    
-    if [ ! -f "$RULES_SCRIPT" ]; then
-        echo -e "${RED}❌ Rules hook script not found at: $RULES_SCRIPT${NC}"
-    else
-        # Test if rules_hook.py is executable
-        if uv run "$RULES_SCRIPT" --help &> /dev/null; then
-            echo "Installing Rules Hook..."
-            
-            # Update settings.json with rules hooks
-            jq --arg rules_script "$RULES_SCRIPT" '
-              # Add UserPromptSubmit hook for prompt validation
-              if .hooks.UserPromptSubmit == null then .hooks.UserPromptSubmit = [] else . end |
-              .hooks.UserPromptSubmit += [{
-                "hooks": [{
-                  "type": "command",
-                  "command": ("uv run " + $rules_script + " --prompt-validator"),
-                  "timeout": 10
-                }]
-              }] |
-              
-              # Add PreToolUse hook for plan enforcement
-              if .hooks.PreToolUse == null then .hooks.PreToolUse = [] else . end |
-              .hooks.PreToolUse += [{
-                "hooks": [{
-                  "type": "command",
-                  "command": ("uv run " + $rules_script + " --plan-enforcer"),
-                  "timeout": 5
-                }]
-              }] |
-              
-              # Add Stop hook for commit helper
-              if .hooks.Stop == null then .hooks.Stop = [] else . end |
-              .hooks.Stop += [{
-                "hooks": [{
-                  "type": "command",
-                  "command": ("uv run " + $rules_script + " --commit-helper"),
-                  "timeout": 10
-                }]
-              }] |
-              
-              # Add SessionStart hook for context loading
-              if .hooks.SessionStart == null then .hooks.SessionStart = [] else . end |
-              .hooks.SessionStart += [{
-                "hooks": [{
-                  "type": "command",
-                  "command": ("uv run " + $rules_script + " --session-start"),
-                  "timeout": 10
-                }]
-              }]
-            ' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
-            
-            echo -e "${GREEN}✓${NC} Rules Hook installed successfully"
-        else
-            echo -e "${YELLOW}⚠${NC} Could not verify rules_hook.py, skipping installation"
-        fi
+    if validate_hook_script "$RULES_SCRIPT" "Rules hook"; then
+        add_hooks_to_settings "$RULES_SCRIPT" "Rules" "${RULES_HOOKS[@]}"
     fi
 else
     echo "Skipping Rules Hook installation"
 fi
 
-echo
-
 # Show installed hooks summary
+echo
 echo -e "${BLUE}=== Installed Hooks Summary ===${NC}"
 echo
 echo -e "${GREEN}✓${NC} Indexer Hooks (Always installed):"
@@ -415,7 +417,7 @@ if [[ "$install_rules" == "y" || "$install_rules" == "Y" ]]; then
     echo "   • SessionStart: Loads project context"
 fi
 
-# Instructions for usage
+# Final instructions
 echo
 echo -e "${GREEN}=== Installation Complete! ===${NC}"
 echo
@@ -435,7 +437,7 @@ echo "   • Direct: uv run $INDEXER_SCRIPT --project-index"
 echo "   Both create PROJECT_INDEX.json in the current directory"
 echo
 echo "📍 Global hooks installed with absolute paths:"
-echo "   • All hooks point to: $INDEXER_SCRIPT"
+echo "   • All hooks point to: $PROJECT_ROOT/.claude/hooks/"
 echo "   • Works from any project directory"
 echo
 echo -e "${BLUE}Happy coding with the Indexer Hook!${NC}"
