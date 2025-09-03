@@ -13,6 +13,7 @@ import sys
 import os
 import argparse
 import subprocess
+import glob
 
 # Get project root
 PROJECT_DIR = os.environ.get('CLAUDE_PROJECT_DIR', '.')
@@ -462,28 +463,46 @@ def handle_session_start(input_data):
     
     # Add session start header
     context_parts.append(f"🏁 Session started at: {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    context_parts.append(f"Session source: {source}")
+    context_parts.append(f"Session source: {source}, Session ID: {session_id}")
     context_parts.append("")
 
-    # Project-specific context files (exact path matching)
-    project_context_files = [
-        ".claude/CONTEXT.md",
-        ".claude/WORKFLOW.md",
-        ".claude/SESSION.md",
+    # Project-specific context files (glob pattern matching)
+    context_file_patterns = [
+        ".claude/**/CONTEXT.md",
+        ".claude/**/WORKFLOW.md", 
+        ".claude/**/SESSION.md",
+        ".claude/**/*-WORKFLOW.md",
+        ".claude/**/*-CONTEXT.md",
+        "TODO.md",
+        ".github/ISSUE_TEMPLATE.md"
     ]
-    # Load project-specific context files with exact matching
-    for file_path in project_context_files:
-        full_path = os.path.join(PROJECT_DIR, file_path)
-        if os.path.exists(full_path):
-            try:
-                with open(full_path, 'r') as f:
-                    content = f.read().strip()
-                    if content:
-                        # Limit to first 3000 chars as in original helper
-                        context_parts.append(f"\n--- Content from {file_path} ---")
-                        context_parts.append(content[:3000])
-            except IOError:
-                pass
+    
+    # Load project-specific context files with glob pattern matching
+    matched_files = set()  # Use set to avoid duplicates
+    
+    for pattern in context_file_patterns:
+        # Use glob to find all files matching the pattern
+        full_pattern = os.path.join(PROJECT_DIR, pattern)
+        try:
+            for matched_path in glob.glob(full_pattern, recursive=True):
+                if os.path.isfile(matched_path):
+                    matched_files.add(matched_path)
+        except (OSError, ValueError):
+            pass  # Skip invalid patterns
+    
+    # Sort files for consistent ordering
+    for full_path in sorted(matched_files):
+        try:
+            with open(full_path, 'r') as f:
+                content = f.read().strip()
+                if content:
+                    # Get relative path for display
+                    rel_path = os.path.relpath(full_path, PROJECT_DIR)
+                    # Limit to first 3000 chars as in original helper
+                    context_parts.append(f"\n--- Content from {rel_path} ---")
+                    context_parts.append(content[:3000])
+        except IOError:
+            pass
 
     # Join all context
     complete_context = "\n".join(context_parts)

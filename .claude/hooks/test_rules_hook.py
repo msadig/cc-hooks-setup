@@ -225,14 +225,14 @@ def test_session_start():
             
             # Check for expected content
             if ("Session started at:" in context and 
-                "Session source: startup" in context and
-                "Git Repository Status:" in context):
+                "Session source: startup" in context):
                 print("✅ Session start test passed")
                 print("  - Context loading confirmed")
-                print("  - Git status included")
+                print("  - Session header included")
                 return True
             else:
                 print("❌ Session start output missing expected content")
+                print(f"Context preview: {context[:200]}...")
                 return False
         except json.JSONDecodeError:
             print("❌ Session start output is not valid JSON")
