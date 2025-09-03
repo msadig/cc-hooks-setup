@@ -85,7 +85,6 @@ def add_always_load_context():
 
     return "\n".join(context_parts)
 
-
 def detect_relevant_agents(manifest, matched_rule_names):
     """
     Detect which agents should be suggested based on matched rules
@@ -473,6 +472,124 @@ def handle_commit_helper(input_data):
     
     return 0
 
+def handle_session_start(input_data):
+    """
+    Handle SessionStart hook - provides development context and project overview
+    """
+    source = input_data.get('source', 'unknown')  # "startup", "resume", "clear"
+    session_id = input_data.get('session_id', 'default')
+    
+    # Load always-available context files (same as UserPromptSubmit)
+    always_load_context = add_always_load_context()
+    
+    # Build development context
+    context_parts = []
+    
+    # Add session start header
+    context_parts.append(f"🏁 Session started at: {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    context_parts.append(f"Session source: {source}")
+    context_parts.append("")
+    
+    # Add always-load context if it exists
+    if always_load_context:
+        context_parts.append(always_load_context)
+        context_parts.append("")
+    
+    # Add git status information
+    try:
+        import subprocess
+        # Check if we're in a git repository
+        git_check = subprocess.run(['git', 'rev-parse', '--git-dir'], 
+                                 capture_output=True, cwd=PROJECT_DIR)
+        if git_check.returncode == 0:
+            context_parts.append("📊 Git Repository Status:")
+            
+            # Get current branch
+            branch_result = subprocess.run(['git', 'branch', '--show-current'],
+                                         capture_output=True, text=True, cwd=PROJECT_DIR)
+            if branch_result.returncode == 0:
+                branch = branch_result.stdout.strip()
+                context_parts.append(f"   Branch: {branch}")
+            
+            # Get status
+            status_result = subprocess.run(['git', 'status', '--porcelain'],
+                                         capture_output=True, text=True, cwd=PROJECT_DIR)
+            if status_result.returncode == 0:
+                status_lines = status_result.stdout.strip().split('\n') if status_result.stdout.strip() else []
+                if status_lines and status_lines != ['']:
+                    staged = len([line for line in status_lines if line and line[0] in 'MADRC'])
+                    modified = len([line for line in status_lines if line and len(line) > 1 and line[1] == 'M'])
+                    untracked = len([line for line in status_lines if line and line.startswith('??')])
+                    
+                    context_parts.append("   Status:")
+                    if staged > 0:
+                        context_parts.append(f"     ● Staged: {staged} file(s)")
+                    if modified > 0:
+                        context_parts.append(f"     ● Modified: {modified} file(s)")
+                    if untracked > 0:
+                        context_parts.append(f"     ● Untracked: {untracked} file(s)")
+                else:
+                    context_parts.append("   Status:")
+                    context_parts.append("     ✓ Working directory clean")
+            
+            # Get last commit
+            commit_result = subprocess.run(['git', 'log', '-1', '--pretty=format:%h %s'],
+                                         capture_output=True, text=True, cwd=PROJECT_DIR)
+            if commit_result.returncode == 0:
+                context_parts.append(f"   Last commit: {commit_result.stdout.strip()}")
+            
+            context_parts.append("")
+    except Exception:
+        pass  # Skip git info if git commands fail
+    
+    # Join all context
+    complete_context = "\n".join(context_parts)
+    
+    # Output using JSON format for SessionStart
+    output = {
+        "hookSpecificOutput": {
+            "hookEventName": "SessionStart",
+            "additionalContext": complete_context
+        }
+    }
+    print(json.dumps(output))
+    
+    # Log the session start event
+    session_dir = os.path.join(PROJECT_DIR, '.claude/sessions', session_id)
+    os.makedirs(session_dir, exist_ok=True)
+    
+    try:
+        import datetime
+        log_data = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "session_id": session_id,
+            "source": source,
+            "context_loaded": bool(always_load_context)
+        }
+        
+        log_dir = os.path.join(PROJECT_DIR, "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = os.path.join(log_dir, 'session_start.json')
+        
+        # Read existing log data or initialize empty list
+        if os.path.exists(log_file):
+            with open(log_file, 'r') as f:
+                try:
+                    log_entries = json.load(f)
+                except (json.JSONDecodeError, ValueError):
+                    log_entries = []
+        else:
+            log_entries = []
+        
+        # Append new entry and save
+        log_entries.append(log_data)
+        with open(log_file, 'w') as f:
+            json.dump(log_entries, f, indent=2)
+    except Exception:
+        pass  # Skip logging if it fails
+    
+    return 0
+
 def main():
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description='Unified hook handler for Claude Code')
@@ -482,6 +599,8 @@ def main():
                        help='Enable plan enforcement for file modifications')
     parser.add_argument('--commit-helper', action='store_true',
                        help='Enable commit helper for changed files')
+    parser.add_argument('--session-start', action='store_true',
+                       help='Enable session start context loading')
     args = parser.parse_args()
     
     # Read input from stdin
@@ -503,6 +622,8 @@ def main():
         exit_code = handle_plan_enforcer(input_data)
     elif hook_event_name == 'Stop' and args.commit_helper:
         exit_code = handle_commit_helper(input_data)
+    elif hook_event_name == 'SessionStart' and args.session_start:
+        exit_code = handle_session_start(input_data)
     
     sys.exit(exit_code)
 

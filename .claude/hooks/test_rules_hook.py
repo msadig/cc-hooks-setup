@@ -198,6 +198,51 @@ def test_flag_routing():
     
     return True
 
+def test_session_start():
+    """Test session start functionality"""
+    print("Testing session start handler...")
+    
+    # Create test input
+    test_input = {
+        "hook_event_name": "SessionStart",
+        "source": "startup",
+        "session_id": "test-session"
+    }
+    
+    # Run the rules hook with --session-start flag
+    result = subprocess.run(
+        [sys.executable, f"{PROJECT_DIR}/.claude/hooks/rules_hook.py", "--session-start"],
+        input=json.dumps(test_input),
+        capture_output=True,
+        text=True
+    )
+    
+    if result.returncode == 0:
+        try:
+            # Parse JSON output
+            output = json.loads(result.stdout)
+            context = output.get("hookSpecificOutput", {}).get("additionalContext", "")
+            
+            # Check for expected content
+            if ("Session started at:" in context and 
+                "Session source: startup" in context and
+                "Git Repository Status:" in context):
+                print("✅ Session start test passed")
+                print("  - Context loading confirmed")
+                print("  - Git status included")
+                return True
+            else:
+                print("❌ Session start output missing expected content")
+                return False
+        except json.JSONDecodeError:
+            print("❌ Session start output is not valid JSON")
+            return False
+    else:
+        print(f"❌ Session start handler failed with exit code {result.returncode}")
+        if result.stderr:
+            print(f"Error: {result.stderr}")
+        return False
+
 def main():
     print("=" * 50)
     print("Testing Rules Hook Functionality")
@@ -209,6 +254,7 @@ def main():
     all_passed &= test_prompt_validator()
     all_passed &= test_plan_enforcer()
     all_passed &= test_commit_helper()
+    all_passed &= test_session_start()
     all_passed &= test_flag_routing()
     
     print("\n" + "=" * 50)

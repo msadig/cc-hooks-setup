@@ -4,15 +4,15 @@
       "hooks": [{
         "type": "command",
         "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --prompt-validator"
-      }, {
-        "type": "command",
-        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/helper_hooks.py user_prompt_submit --add-context"
       }]
     }],
     "SessionStart": [{
       "hooks": [{
         "type": "command",
-        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/helper_hooks.py session_start --load-context --announce"
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --session-start"
+      }, {
+        "type": "command",
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/helper_hooks.py session_start --announce"
       }]
     }],
     "PreToolUse": [{
