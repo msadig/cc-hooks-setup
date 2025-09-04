@@ -46,6 +46,10 @@ def test_file_matcher(file_path, tool_name="Read"):
                 if "hookSpecificOutput" in output:
                     context = output["hookSpecificOutput"].get("additionalContext", "")
                     print(context)
+                    # Count lines and approximate tokens for efficiency metrics
+                    line_count = len(context.split('\n'))
+                    approx_tokens = len(context.split())
+                    print(f"\n📊 Output: {line_count} lines, ~{approx_tokens} tokens")
                 else:
                     print("No additional context provided")
             except json.JSONDecodeError:

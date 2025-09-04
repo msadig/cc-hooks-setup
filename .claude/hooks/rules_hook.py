@@ -545,36 +545,29 @@ def handle_pretool_file_matcher(input_data):
     
     # Build output to provide as additional context
     output_lines = []
-    output_lines.append(f"## File-Based Rules Loaded for: {filepath}")
+    output_lines.append(f"## Rules for: {filepath}")
     output_lines.append("")
     
-    if final_rules:
-        output_lines.append("### Applicable Rules")
-        output_lines.append("| Rule | Priority | Reason |")
-        output_lines.append("|------|----------|--------|")
-        
-        for rule in final_rules:
-            reason = "📁 File Pattern Match" if rule['matched'] else "📋 Always Loaded"
-            output_lines.append(f"| {rule['name'].title()} | {rule['priority'].upper()} | {reason} |")
-        
-        output_lines.append("")
-        output_lines.append("---")
-        output_lines.append("")
-    
-    # Load rule summaries based on priority
+    # Group rules by priority
+    priority_groups = {}
     for rule in final_rules:
-        rule_data = rule['data']
-        priority = rule['priority']
-        matched = rule['matched']
-        summary = rule_data.get('summary', '')
-        file_path = rule_data.get('file', '')
-        
-        # For file-matched rules, show summary
-        if matched and summary:
-            output_lines.append(f"### 📁 {rule['name'].title()} [PRIORITY: {priority.upper()}]")
-            output_lines.append(f"**Summary:** {summary}")
-            if file_path:
-                output_lines.append(f"**Details:** See `.claude/rules/{file_path}` if needed")
+        priority = rule['data'].get('priority', 'low').upper()
+        if priority not in priority_groups:
+            priority_groups[priority] = []
+        priority_groups[priority].append(rule)
+    
+    # Output rules grouped by priority (highest first)
+    priority_order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']
+    for priority in priority_order:
+        if priority in priority_groups:
+            output_lines.append(f"### {priority}")
+            for rule in priority_groups[priority]:
+                rule_name = rule['name'].replace('-', ' ').title()
+                summary = rule['data'].get('summary', '')
+                if summary:
+                    output_lines.append(f"• {rule_name} - {summary}")
+                else:
+                    output_lines.append(f"• {rule_name}")
             output_lines.append("")
     
     # Join output
