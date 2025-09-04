@@ -162,7 +162,7 @@ echo
 
 # Rules Hook
 echo -e "${YELLOW}📋 Rules Hook${NC}"
-echo "   Remove project rules, plan enforcement, and commit helpers?"
+echo "   Remove project rules, file pattern matching, plan enforcement, and commit helpers?"
 read -p "Uninstall Rules Hook? (y/n): " uninstall_rules
 
 if [[ "$uninstall_rules" == "y" || "$uninstall_rules" == "Y" ]]; then
@@ -171,6 +171,7 @@ if [[ "$uninstall_rules" == "y" || "$uninstall_rules" == "Y" ]]; then
     # Remove rules hooks from each hook type
     remove_hooks_from_group "UserPromptSubmit" "rules_hook.py --prompt-validator"
     remove_hooks_from_group "PreToolUse" "rules_hook.py --plan-enforcer"
+    remove_hooks_from_group "PreToolUse" "rules_hook.py --file-matcher"
     remove_hooks_from_group "Stop" "rules_hook.py --commit-helper"
     remove_hooks_from_group "SessionStart" "rules_hook.py --session-start"
     

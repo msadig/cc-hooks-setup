@@ -43,6 +43,7 @@ HELPER_HOOKS=(
 RULES_HOOKS=(
     "UserPromptSubmit" "--prompt-validator" 10
     "PreToolUse" "--plan-enforcer" 5
+    "PreToolUse" "--file-matcher" 5
     "Stop" "--commit-helper" 10
     "SessionStart" "--session-start" 10
 )
@@ -374,6 +375,7 @@ echo
 echo -e "${YELLOW}📋 Rules Hook${NC}"
 echo "   Provides:"
 echo "   • Auto-loads project rules from .claude/rules/"
+echo "   • File pattern matching for automatic rule loading"
 echo "   • Enforces planning before code changes"
 echo "   • Commit reminders for modified files"
 echo "   • Context-aware development workflow"
@@ -412,7 +414,7 @@ if [[ "$install_rules" == "y" || "$install_rules" == "Y" ]]; then
     echo
     echo -e "${GREEN}✓${NC} Rules Hook:"
     echo "   • UserPromptSubmit: Validates prompts against project rules"
-    echo "   • PreToolUse: Enforces planning before file changes"
+    echo "   • PreToolUse: Enforces planning and loads rules by file patterns"
     echo "   • Stop: Reminds to commit changes"
     echo "   • SessionStart: Loads project context"
 fi
