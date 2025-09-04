@@ -23,41 +23,12 @@ if git rev-parse --git-dir > /dev/null 2>&1; then
     fi
 fi
 
-# Model-specific context limits (in tokens)
-# These are USABLE limits (80% of theoretical before auto-compact triggers)
-get_context_limit() {
-    local model_id="$1"
-    local model_display="$2"
-    
-    # Claude 3.5 Sonnet models have 1M theoretical, 800k usable
-    if [[ "$model_id" == *"claude-3-5-sonnet"* ]] || [[ "$model_display" == *"Sonnet"* ]]; then
-        echo 800000  # 80% of 1M
-    # Claude Opus 4.1 - 200k theoretical, 160k usable
-    elif [[ "$model_id" == *"claude-opus-4-1"* ]]; then
-        echo 160000  # 80% of 200k
-    # Claude 3 Opus - 200k theoretical, 160k usable
-    elif [[ "$model_id" == *"claude-3-opus"* ]] || [[ "$model_display" == *"Opus"* ]]; then
-        echo 160000  # 80% of 200k
-    # Claude 3 Haiku - 200k theoretical, 160k usable
-    elif [[ "$model_id" == *"claude-3-haiku"* ]] || [[ "$model_display" == *"Haiku"* ]]; then
-        echo 160000  # 80% of 200k
-    # Claude 2.1 - 200k theoretical, 160k usable
-    elif [[ "$model_id" == *"claude-2.1"* ]]; then
-        echo 160000  # 80% of 200k
-    # Claude 2.0 - 100k theoretical, 80k usable
-    elif [[ "$model_id" == *"claude-2.0"* ]]; then
-        echo 80000   # 80% of 100k
-    # Claude Instant - 100k theoretical, 80k usable
-    elif [[ "$model_id" == *"claude-instant"* ]]; then
-        echo 80000   # 80% of 100k
-    # Default fallback - assume 200k theoretical, 160k usable
-    else
-        echo 160000  # 80% of 200k
-    fi
-}
-
-# Get the context limit for the current model
-CONTEXT_LIMIT=$(get_context_limit "$MODEL_ID" "$MODEL_DISPLAY")
+# Determine usable context limit (80% of theoretical before auto-compact)
+if [[ "$MODEL_DISPLAY" == *"Sonnet"* ]]; then
+    CONTEXT_LIMIT=800000   # 800k usable for 1M Sonnet models
+else
+    CONTEXT_LIMIT=160000   # 160k usable for 200k models (Opus, etc.)
+fi
 
 # Improved token estimation algorithm
 # More accurate approximation based on Claude's actual tokenization
