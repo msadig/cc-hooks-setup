@@ -33,11 +33,11 @@ INDEXER_HOOKS=(
 )
 
 HELPER_HOOKS=(
-    "SessionStart" "session_start --load-context" 10
+    "SessionStart" "session_start --load-context --announce" 10
     "PreToolUse" "pre_tool_use" 5
     "Stop" "stop --announce" 10
-    "Notification" "notification" 5
-    "SubagentStop" "subagent_stop" 5
+    "Notification" "notification --announce" 5
+    "SubagentStop" "subagent_stop --announce" 5
 )
 
 RULES_HOOKS=(

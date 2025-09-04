@@ -370,21 +370,7 @@ def handle_session_start(args, input_data):
     # Log the session start event
     log_to_json('session_start', input_data)
 
-    # Load development context if requested
-    if args.load_context:
-        context = load_development_context(source)
-        if context:
-            # Using JSON output to add context
-            output = {
-                "hookSpecificOutput": {
-                    "hookEventName": "SessionStart",
-                    "additionalContext": context
-                }
-            }
-            print(json.dumps(output))
-            sys.exit(0)
-
-    # Announce session start if requested
+    # Announce session start if requested (do this BEFORE returning context)
     if args.announce:
         try:
             tts_script = get_tts_script_path()
@@ -404,6 +390,20 @@ def handle_session_start(args, input_data):
                 )
         except Exception:
             pass
+
+    # Load development context if requested
+    if args.load_context:
+        context = load_development_context(source)
+        if context:
+            # Using JSON output to add context
+            output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "SessionStart",
+                    "additionalContext": context
+                }
+            }
+            print(json.dumps(output))
+            sys.exit(0)
     
     # Success
     sys.exit(0)
