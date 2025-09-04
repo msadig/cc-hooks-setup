@@ -1,5 +1,13 @@
 #!/bin/bash
 # Enhanced Claude Code statusline with session-specific context tracking
+
+# Check for jq dependency first
+if ! command -v jq >/dev/null 2>&1; then
+    echo "❌ StatusLine: jq not installed"
+    echo "Install: brew install jq (macOS) | apt install jq (Ubuntu) | choco install jq (Windows)"
+    exit 0
+fi
+
 input=$(cat)
 
 # Extract basic values using jq with safe defaults
