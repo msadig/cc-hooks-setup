@@ -1,5 +1,5 @@
 #!/bin/bash
-# Enhanced Claude Code statusline with context tracking, cost info, and session details
+# Enhanced Claude Code statusline with session-specific context tracking
 input=$(cat)
 
 # Extract basic values using jq with safe defaults
@@ -7,8 +7,10 @@ MODEL_ID=$(echo "$input" | jq -r '.model.id // ""')
 MODEL_DISPLAY=$(echo "$input" | jq -r '.model.display_name // "Claude"')
 PROJECT_DIR=$(echo "$input" | jq -r '.workspace.project_dir // ""')
 CURRENT_DIR=$(echo "$input" | jq -r '.workspace.current_dir // ""')
+TRANSCRIPT_PATH=$(echo "$input" | jq -r '.transcript_path // ""')
+SESSION_ID=$(echo "$input" | jq -r '.session_id // ""')
 
-# Extract cost and metrics information
+# Extract cost and metrics information (these remain global across sessions)
 TOTAL_COST=$(echo "$input" | jq -r '.cost.total_cost_usd // 0')
 TOTAL_DURATION=$(echo "$input" | jq -r '.cost.total_duration_ms // 0')
 LINES_ADDED=$(echo "$input" | jq -r '.cost.total_lines_added // 0')
@@ -30,40 +32,41 @@ else
     CONTEXT_LIMIT=160000   # 160k usable for 200k models (Opus, etc.)
 fi
 
-# Improved token estimation algorithm
-# More accurate approximation based on Claude's actual tokenization
-# Average: ~1.3 tokens per word, ~4 characters per token
-# Code tends to have more tokens due to syntax and formatting
-calculate_estimated_tokens() {
-    local duration="$1"
-    local lines_added="$2"
-    local lines_removed="$3"
+# Session-specific context calculation from transcript
+calculate_session_context() {
+    local transcript_path="$1"
     
-    # Base token usage from conversation duration
-    # Assuming average interaction generates ~50 tokens per second of API time
-    local api_tokens=$(( TOTAL_DURATION / 20 ))
+    # Default fallback values when transcript unavailable
+    if [[ -z "$transcript_path" || ! -f "$transcript_path" ]]; then
+        echo "17900"  # Reasonable default for new sessions
+        return
+    fi
     
-    # Code changes: average line has ~10-15 tokens (accounting for syntax, whitespace)
-    local code_tokens=$(( (lines_added * 12) + (lines_removed * 8) ))
+    # Parse transcript to get actual token usage from most recent main-chain message
+    local context_tokens=$(jq -r '
+        select(.isSidechain != true) |
+        select(.message.usage != null) |
+        .message.usage |
+        (.input_tokens // 0) + 
+        (.cache_read_input_tokens // 0) + 
+        (.cache_creation_input_tokens // 0)
+    ' "$transcript_path" 2>/dev/null | tail -n 1)
     
-    # Add a baseline for system prompts and context (~2000 tokens overhead)
-    local system_overhead=2000
-    
-    # Total with a multiplier for conversation history (messages accumulate)
-    # Each exchange adds previous context, so multiply by a growth factor
-    local conversation_multiplier=3
-    local total=$(( system_overhead + (api_tokens + code_tokens) * conversation_multiplier ))
-    
-    echo "$total"
+    # If no valid token count found, use fallback
+    if [[ -z "$context_tokens" || "$context_tokens" == "null" ]]; then
+        echo "17900"
+    else
+        echo "$context_tokens"
+    fi
 }
 
-# Calculate estimated tokens with improved algorithm
-ESTIMATED_TOKENS=$(calculate_estimated_tokens "$TOTAL_DURATION" "$LINES_ADDED" "$LINES_REMOVED")
-if [ $ESTIMATED_TOKENS -gt $CONTEXT_LIMIT ]; then
-    ESTIMATED_TOKENS=$CONTEXT_LIMIT
+# Calculate session-specific context from transcript
+SESSION_TOKENS=$(calculate_session_context "$TRANSCRIPT_PATH")
+if [ $SESSION_TOKENS -gt $CONTEXT_LIMIT ]; then
+    SESSION_TOKENS=$CONTEXT_LIMIT
 fi
 
-CONTEXT_REMAINING=$((CONTEXT_LIMIT - ESTIMATED_TOKENS))
+CONTEXT_REMAINING=$((CONTEXT_LIMIT - SESSION_TOKENS))
 CONTEXT_PCT=$((CONTEXT_REMAINING * 100 / CONTEXT_LIMIT))
 
 # Estimate time until context reset (assuming 1000 tokens per minute of active use)
@@ -141,8 +144,8 @@ fi
 
 # Calculate tokens per minute if duration is significant
 TPM=""
-if [ $DURATION_MIN -gt 0 ] && [ $ESTIMATED_TOKENS -gt 0 ]; then
-    TOKENS_PER_MIN=$((ESTIMATED_TOKENS / DURATION_MIN))
+if [ $DURATION_MIN -gt 0 ] && [ $SESSION_TOKENS -gt 0 ]; then
+    TOKENS_PER_MIN=$((SESSION_TOKENS / DURATION_MIN))
     TPM=" (${TOKENS_PER_MIN} tpm)"
 fi
 
@@ -174,4 +177,4 @@ PROGRESS_BAR=$(create_progress_bar "$CONTEXT_PCT")
 # Line 1: Keep original format with project/directory info
 echo "[$MODEL_DISPLAY] 🎯 ${PROJECT_DIR##*/}: 📁 ${CURRENT_DIR##*/}${GIT_BRANCH}"
 # Line 2: Enhanced with visual progress bar, time until reset, model context size, cost info
-echo -e "🧠 ${CONTEXT_COLOR}${PROGRESS_BAR} ${CONTEXT_PCT}% of ${CONTEXT_DISPLAY}k${RESET_COLOR} ${TIME_COLOR}(⏳ ${RESET_TIME} until reset @ ${RESET_TIME_DISPLAY})${RESET_COLOR} ${COST_COLOR}💰\$${COST_DISPLAY}${COST_PER_HOUR} 📊${METRIC_COLOR} ${ESTIMATED_TOKENS} tok${TPM}${RESET_COLOR}"
+echo -e "🧠 ${CONTEXT_COLOR}${PROGRESS_BAR} ${CONTEXT_PCT}% of ${CONTEXT_DISPLAY}k${RESET_COLOR} ${TIME_COLOR}(⏳ ${RESET_TIME} until reset @ ${RESET_TIME_DISPLAY})${RESET_COLOR} ${COST_COLOR}💰\$${COST_DISPLAY}${COST_PER_HOUR} 📊${METRIC_COLOR} ${SESSION_TOKENS} tok${TPM}${RESET_COLOR}"
