@@ -197,4 +197,4 @@ PROGRESS_BAR=$(create_progress_bar "$CONTEXT_USED_PCT")
 # Line 1: Keep original format with project/directory info
 echo "[$MODEL_DISPLAY] 🎯 ${PROJECT_DIR##*/}: 📁 ${CURRENT_DIR##*/}${GIT_BRANCH}"
 # Line 2: Session context + Global limits + Cost info
-echo -e "🧠 ${CONTEXT_COLOR}${PROGRESS_BAR} ${CONTEXT_USED_PCT}% of ${CONTEXT_DISPLAY}k (${CONTEXT_STATUS})${RESET_COLOR} ${TIME_COLOR}⏳ Global limits reset in ${GLOBAL_RESET} @ ${GLOBAL_RESET_TIME}${RESET_COLOR} ${COST_COLOR}💰\$${COST_DISPLAY}${COST_PER_HOUR}${RESET_COLOR} ${METRIC_COLOR}📊 ${SESSION_TOKENS} tok${TPM}${RESET_COLOR}"
+echo -e "🧠 ${CONTEXT_COLOR}${PROGRESS_BAR} ${CONTEXT_USED_PCT}% of ${CONTEXT_DISPLAY}k (${CONTEXT_STATUS})${RESET_COLOR} ${TIME_COLOR}⏳ Limits reset in ${GLOBAL_RESET} @ ${GLOBAL_RESET_TIME}${RESET_COLOR} ${COST_COLOR}💰\$${COST_DISPLAY}${COST_PER_HOUR}${RESET_COLOR} ${METRIC_COLOR}📊 ${SESSION_TOKENS} tok${TPM}${RESET_COLOR}"
