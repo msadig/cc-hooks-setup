@@ -16,6 +16,7 @@ import json
 import os
 import subprocess
 import sys
+from collections import defaultdict
 
 # Get project root
 PROJECT_DIR = os.environ.get('CLAUDE_PROJECT_DIR', '.')
@@ -548,12 +549,10 @@ def handle_pretool_file_matcher(input_data):
     output_lines.append(f"## Rules for: {filepath}")
     output_lines.append("")
     
-    # Group rules by priority
-    priority_groups = {}
+    # Group rules by priority using defaultdict
+    priority_groups = defaultdict(list)
     for rule in final_rules:
         priority = rule['data'].get('priority', 'low').upper()
-        if priority not in priority_groups:
-            priority_groups[priority] = []
         priority_groups[priority].append(rule)
     
     # Output rules grouped by priority (highest first)
