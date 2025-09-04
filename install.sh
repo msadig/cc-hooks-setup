@@ -26,27 +26,27 @@ SETTINGS_FILE="$CLAUDE_CONFIG_DIR/settings.json"
 
 # Define hook configurations as data
 INDEXER_HOOKS=(
-    "UserPromptSubmit" "--i-flag-hook" 20
-    "SessionStart" "--session-start" 5
-    "PreCompact" "--precompact" 15
-    "Stop" "--stop" 45
+    "UserPromptSubmit" "--i-flag-hook" 20 ""
+    "SessionStart" "--session-start" 5 ""
+    "PreCompact" "--precompact" 15 ""
+    "Stop" "--stop" 45 ""
 )
 
 HELPER_HOOKS=(
-    "SessionStart" "session_start --load-context --announce" 10
-    "PreToolUse" "pre_tool_use" 5
-    "Stop" "stop --announce" 10
-    "Notification" "notification --announce" 5
-    "SubagentStop" "subagent_stop --announce" 5
+    "SessionStart" "session_start --load-context --announce" 10 ""
+    "PreToolUse" "pre_tool_use" 5 ""
+    "Stop" "stop --announce" 10 ""
+    "Notification" "notification --announce" 5 ""
+    "SubagentStop" "subagent_stop --announce" 5 ""
 )
 
 RULES_HOOKS=(
-    "UserPromptSubmit" "--prompt-validator" 10
-    "PreToolUse" "--immutable-check" 5
-    "PreToolUse" "--plan-enforcer" 5
-    "PreToolUse" "--file-matcher" 5
-    "Stop" "--commit-helper" 10
-    "SessionStart" "--session-start" 10
+    "UserPromptSubmit" "--prompt-validator" 10 ""
+    "PreToolUse" "--immutable-check" 5 "Write|Edit|MultiEdit|NotebookEdit"
+    "PreToolUse" "--plan-enforcer" 5 ""
+    "PreToolUse" "--file-matcher" 5 "Read|Write|Edit|MultiEdit|NotebookEdit"
+    "Stop" "--commit-helper" 10 ""
+    "SessionStart" "--session-start" 10 ""
 )
 
 # ==================== Helper Functions ====================
@@ -141,12 +141,13 @@ add_hooks_to_settings() {
     
     echo "Installing $hook_name..."
     
-    # Process hooks in groups of 3 (type, args, timeout)
+    # Process hooks in groups of 4 (type, args, timeout, matcher)
     while [ $# -gt 0 ]; do
         local hook_type=$1
         local command_args=$2
         local timeout=$3
-        shift 3
+        local matcher=$4
+        shift 4
         
         # Check if this hook already exists
         if [[ $(hook_exists "$hook_type" "$script_path" "$command_args") == "true" ]]; then
@@ -156,36 +157,73 @@ add_hooks_to_settings() {
         fi
         
         # Add the hook to existing group or create new one
-        jq --arg type "$hook_type" \
-           --arg cmd "uv run $script_path $command_args" \
-           --argjson timeout "$timeout" \
-           '
-           # Initialize hooks object and type array if needed
-           if .hooks == null then .hooks = {} else . end |
-           if .hooks[$type] == null then .hooks[$type] = [] else . end |
-           
-           # Find index of first group without matcher - for hooks that do not use matchers
-           (.hooks[$type] | to_entries | map(select(.value | has("matcher") | not)) | first // null | .key // null) as $group_index |
-           
-           if $group_index != null then
-               # Append to existing group without matcher
-               .hooks[$type][$group_index].hooks += [{
-                   "type": "command",
-                   "command": $cmd,
-                   "timeout": $timeout
-               }]
-           else
-               # Create new group without matcher
-               .hooks[$type] += [{
-                   "hooks": [{
+        if [[ -z "$matcher" ]]; then
+            # No matcher - add to group without matcher (original logic)
+            jq --arg type "$hook_type" \
+               --arg cmd "uv run $script_path $command_args" \
+               --argjson timeout "$timeout" \
+               '
+               # Initialize hooks object and type array if needed
+               if .hooks == null then .hooks = {} else . end |
+               if .hooks[$type] == null then .hooks[$type] = [] else . end |
+               
+               # Find index of first group without matcher
+               (.hooks[$type] | to_entries | map(select(.value | has("matcher") | not)) | first // null | .key // null) as $group_index |
+               
+               if $group_index != null then
+                   # Append to existing group without matcher
+                   .hooks[$type][$group_index].hooks += [{
                        "type": "command",
                        "command": $cmd,
                        "timeout": $timeout
                    }]
-               }]
-           end
-           ' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && \
-        mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+               else
+                   # Create new group without matcher
+                   .hooks[$type] += [{
+                       "hooks": [{
+                           "type": "command",
+                           "command": $cmd,
+                           "timeout": $timeout
+                       }]
+                   }]
+               end
+               ' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && \
+            mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+        else
+            # Has matcher - add to group with specific matcher
+            jq --arg type "$hook_type" \
+               --arg cmd "uv run $script_path $command_args" \
+               --argjson timeout "$timeout" \
+               --arg matcher "$matcher" \
+               '
+               # Initialize hooks object and type array if needed
+               if .hooks == null then .hooks = {} else . end |
+               if .hooks[$type] == null then .hooks[$type] = [] else . end |
+               
+               # Find index of group with this specific matcher
+               (.hooks[$type] | to_entries | map(select(.value.matcher == $matcher)) | first // null | .key // null) as $group_index |
+               
+               if $group_index != null then
+                   # Append to existing group with same matcher
+                   .hooks[$type][$group_index].hooks += [{
+                       "type": "command",
+                       "command": $cmd,
+                       "timeout": $timeout
+                   }]
+               else
+                   # Create new group with matcher
+                   .hooks[$type] += [{
+                       "matcher": $matcher,
+                       "hooks": [{
+                           "type": "command",
+                           "command": $cmd,
+                           "timeout": $timeout
+                       }]
+                   }]
+               end
+               ' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && \
+            mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+        fi
         
         echo "   ✓ Added $hook_type hook"
         ((hooks_added++))
