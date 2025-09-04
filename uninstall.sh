@@ -1,8 +1,9 @@
 #!/bin/bash
-set -eo pipefail
 
-# Hook Uninstaller for Claude Code
-# Interactively removes hooks from Claude Code settings
+# Indexer Hook Uninstallation Script
+# Removes Claude Code hooks and cleans up configuration
+
+set -e
 
 # Colors for output
 RED='\033[0;31m'
@@ -11,90 +12,94 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-echo -e "${BLUE}=== Claude Code Hooks Uninstaller ===${NC}"
+# Claude Code configuration
+CLAUDE_CONFIG_DIR="$HOME/.claude"
+SETTINGS_FILE="$CLAUDE_CONFIG_DIR/settings.json"
+
+# Unified status printing
+print_status() {
+    local type=$1
+    local message=$2
+    case $type in
+        success) echo -e "${GREEN}✓${NC} $message" ;;
+        error)   echo -e "${RED}❌${NC} $message" ;;
+        warning) echo -e "${YELLOW}⚠${NC} $message" ;;
+        info)    echo -e "${BLUE}ℹ${NC} $message" ;;
+    esac
+}
+
+# Create timestamped backup
+create_timestamped_backup() {
+    local timestamp=$(date +"%Y%m%d_%H%M%S")
+    local backup_file="${SETTINGS_FILE}.backup.uninstall.${timestamp}"
+    
+    cp "$SETTINGS_FILE" "$backup_file"
+    print_status success "Backup created: $backup_file"
+}
+
+# Function to remove specific hooks while preserving others in the same group
+remove_hooks_from_group() {
+    local hook_type=$1
+    local hook_pattern=$2
+    local temp_file="${SETTINGS_FILE}.tmp"
+    
+    # Use jq to filter out specific hooks within groups while preserving the group structure
+    jq --arg type "$hook_type" --arg pattern "$hook_pattern" '
+      if .hooks[$type] then
+        .hooks[$type] = [
+          .hooks[$type][] | 
+          if .hooks then
+            # Filter individual hooks within the group
+            .hooks = [.hooks[] | select(.command | contains($pattern) | not)]
+          else
+            .
+          end
+        ] |
+        # Remove empty groups
+        .hooks[$type] = [.hooks[$type][] | select((.hooks | length) > 0)] |
+        # Remove the entire hook type if no groups remain
+        if (.hooks[$type] | length) == 0 then
+          del(.hooks[$type])
+        else
+          .
+        end
+      else
+        .
+      end
+    ' "$SETTINGS_FILE" > "$temp_file" && mv "$temp_file" "$SETTINGS_FILE"
+}
+
+# ==================== Main Uninstallation ====================
+
+echo -e "${BLUE}=== Indexer Hook Uninstallation ===${NC}"
 echo
 
-# Get the directory where this script is located
-PROJECT_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-HOOKS_DIR="$PROJECT_ROOT/.claude/hooks"
-
-echo "This uninstaller can remove the following hooks from ~/.claude/settings.json:"
-echo
-echo -e "${YELLOW}📁 Indexer Hooks${NC}"
-echo "   • UserPromptSubmit: -i flag detection"
-echo "   • SessionStart: Auto-indexing"
-echo "   • PreCompact: Index updates"
-echo "   • Stop: Index on session end"
-echo "   • /index command"
-echo "   • index-analyzer subagent"
-echo
-echo -e "${YELLOW}📦 Helper Hooks${NC}"
-echo "   • SessionStart: Git status display"
-echo "   • PreToolUse: Safety checks"
-echo "   • Stop: Session notifications"
-echo "   • Notification: Custom notifications"
-echo "   • SubagentStop: Subagent notifications"
-echo
-echo -e "${YELLOW}📋 Rules Hook${NC}"
-echo "   • UserPromptSubmit: Prompt validation"
-echo "   • PreToolUse: Plan enforcement"
-echo "   • Stop: Commit helper"
-echo "   • SessionStart: Context loading"
-echo
-echo -e "${YELLOW}⚠️  Note:${NC} This will NOT remove:"
-echo "   • The hook scripts at $PROJECT_ROOT/.claude"
-echo "   • Any PROJECT_INDEX.json files"
-echo "   • Any custom hooks you've added"
-echo
-
-# Check if we're running interactively or via pipe
-if [ -t 0 ]; then
-    # Interactive mode - can use read
-    read -p "Continue with uninstall? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Uninstall cancelled"
-        exit 0
-    fi
-else
-    # Non-interactive mode - skip confirmation
-    echo "Running in non-interactive mode, proceeding with uninstall..."
-    echo ""
-fi
-
-echo
-
-# Check for jq
+# Check if jq is installed
 if ! command -v jq &> /dev/null; then
-    echo -e "${RED}❌ jq is not installed but is required for uninstall${NC}"
-    echo "Please install jq first:"
-    echo "  brew install jq  # on macOS"
-    echo "  apt-get install jq  # on Ubuntu/Debian"
+    print_status error "jq is not installed. Please install it first."
     exit 1
 fi
 
-SETTINGS_FILE="$HOME/.claude/settings.json"
-
 # Check if settings.json exists
 if [[ ! -f "$SETTINGS_FILE" ]]; then
-    echo -e "${YELLOW}No settings.json found, nothing to uninstall${NC}"
+    print_status warning "No Claude Code settings found at $SETTINGS_FILE"
+    echo "Nothing to uninstall."
     exit 0
 fi
 
-# Backup settings
-echo "Creating backup..."
-cp "$SETTINGS_FILE" "${SETTINGS_FILE}.uninstall-backup"
-echo -e "${GREEN}✓${NC} Backup saved as: ${SETTINGS_FILE}.uninstall-backup"
+# Create a backup
+echo "Creating backup of current settings..."
+create_timestamped_backup
+
+echo
+echo "Which hooks would you like to uninstall?"
+echo "(You can choose to remove some or all)"
 echo
 
 # Track what was removed
 removed_indexer=false
 removed_helper=false
 removed_rules=false
-
-# Interactive selection for each hook type
-echo -e "${BLUE}=== Select Hooks to Uninstall ===${NC}"
-echo
 
 # Indexer Hooks
 echo -e "${YELLOW}📁 Indexer Hooks${NC}"
@@ -104,49 +109,11 @@ read -p "Uninstall Indexer Hooks? (y/n): " uninstall_indexer
 if [[ "$uninstall_indexer" == "y" || "$uninstall_indexer" == "Y" ]]; then
     echo "Removing Indexer hooks..."
     
-    # Remove indexer hooks using jq - preserve other hooks
-    jq '
-      # Remove indexer UserPromptSubmit hooks
-      if .hooks.UserPromptSubmit then
-        .hooks.UserPromptSubmit = [.hooks.UserPromptSubmit[] | select(
-          all(.hooks[]?.command // ""; 
-            contains("indexer_hook.py --i-flag-hook") | not)
-        )]
-      else . end |
-      
-      # Remove indexer SessionStart hooks
-      if .hooks.SessionStart then
-        .hooks.SessionStart = [.hooks.SessionStart[] | select(
-          all(.hooks[]?.command // ""; 
-            contains("indexer_hook.py --session-start") | not)
-        )]
-      else . end |
-      
-      # Remove indexer PreCompact hooks
-      if .hooks.PreCompact then
-        .hooks.PreCompact = [.hooks.PreCompact[] | select(
-          all(.hooks[]?.command // ""; 
-            contains("indexer_hook.py --precompact") | not)
-        )]
-      else . end |
-      
-      # Remove indexer Stop hooks
-      if .hooks.Stop then
-        .hooks.Stop = [.hooks.Stop[] | select(
-          all(.hooks[]?.command // ""; 
-            contains("indexer_hook.py --stop") | not)
-        )]
-      else . end |
-      
-      # Clean up empty arrays (only if they are completely empty)
-      if (.hooks.UserPromptSubmit // []) == [] then del(.hooks.UserPromptSubmit) else . end |
-      if (.hooks.SessionStart // []) == [] then del(.hooks.SessionStart) else . end |
-      if (.hooks.PreCompact // []) == [] then del(.hooks.PreCompact) else . end |
-      if (.hooks.Stop // []) == [] then del(.hooks.Stop) else . end |
-      
-      # Clean up empty hooks object (only if completely empty)
-      if .hooks == {} then del(.hooks) else . end
-    ' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+    # Remove indexer hooks from each hook type
+    remove_hooks_from_group "UserPromptSubmit" "indexer_hook.py --i-flag-hook"
+    remove_hooks_from_group "SessionStart" "indexer_hook.py --session-start"
+    remove_hooks_from_group "PreCompact" "indexer_hook.py --precompact"
+    remove_hooks_from_group "Stop" "indexer_hook.py --stop"
     
     # Remove /index command
     INDEX_COMMAND="$HOME/.claude/commands/index.md"
@@ -178,57 +145,12 @@ read -p "Uninstall Helper Hooks? (y/n): " uninstall_helper
 if [[ "$uninstall_helper" == "y" || "$uninstall_helper" == "Y" ]]; then
     echo "Removing Helper hooks..."
     
-    jq '
-      # Remove helper SessionStart hooks
-      if .hooks.SessionStart then
-        .hooks.SessionStart = [.hooks.SessionStart[] | select(
-          all(.hooks[]?.command // ""; 
-            contains("helper_hooks.py session_start") | not)
-        )]
-      else . end |
-      
-      # Remove helper PreToolUse hooks
-      if .hooks.PreToolUse then
-        .hooks.PreToolUse = [.hooks.PreToolUse[] | select(
-          all(.hooks[]?.command // ""; 
-            contains("helper_hooks.py pre_tool_use") | not)
-        )]
-      else . end |
-      
-      # Remove helper Stop hooks
-      if .hooks.Stop then
-        .hooks.Stop = [.hooks.Stop[] | select(
-          all(.hooks[]?.command // ""; 
-            contains("helper_hooks.py stop") | not)
-        )]
-      else . end |
-      
-      # Remove helper Notification hooks
-      if .hooks.Notification then
-        .hooks.Notification = [.hooks.Notification[] | select(
-          all(.hooks[]?.command // ""; 
-            contains("helper_hooks.py notification") | not)
-        )]
-      else . end |
-      
-      # Remove helper SubagentStop hooks
-      if .hooks.SubagentStop then
-        .hooks.SubagentStop = [.hooks.SubagentStop[] | select(
-          all(.hooks[]?.command // ""; 
-            contains("helper_hooks.py subagent_stop") | not)
-        )]
-      else . end |
-      
-      # Clean up empty arrays
-      if (.hooks.SessionStart // []) == [] then del(.hooks.SessionStart) else . end |
-      if (.hooks.PreToolUse // []) == [] then del(.hooks.PreToolUse) else . end |
-      if (.hooks.Stop // []) == [] then del(.hooks.Stop) else . end |
-      if (.hooks.Notification // []) == [] then del(.hooks.Notification) else . end |
-      if (.hooks.SubagentStop // []) == [] then del(.hooks.SubagentStop) else . end |
-      
-      # Clean up empty hooks object
-      if .hooks == {} then del(.hooks) else . end
-    ' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+    # Remove helper hooks from each hook type
+    remove_hooks_from_group "SessionStart" "helper_hooks.py session_start"
+    remove_hooks_from_group "PreToolUse" "helper_hooks.py pre_tool_use"
+    remove_hooks_from_group "Stop" "helper_hooks.py stop"
+    remove_hooks_from_group "Notification" "helper_hooks.py notification"
+    remove_hooks_from_group "SubagentStop" "helper_hooks.py subagent_stop"
     
     echo -e "${GREEN}✓${NC} Helper Hooks removed"
     removed_helper=true
@@ -246,48 +168,11 @@ read -p "Uninstall Rules Hook? (y/n): " uninstall_rules
 if [[ "$uninstall_rules" == "y" || "$uninstall_rules" == "Y" ]]; then
     echo "Removing Rules hook..."
     
-    jq '
-      # Remove rules UserPromptSubmit hooks
-      if .hooks.UserPromptSubmit then
-        .hooks.UserPromptSubmit = [.hooks.UserPromptSubmit[] | select(
-          all(.hooks[]?.command // ""; 
-            contains("rules_hook.py --prompt-validator") | not)
-        )]
-      else . end |
-      
-      # Remove rules PreToolUse hooks
-      if .hooks.PreToolUse then
-        .hooks.PreToolUse = [.hooks.PreToolUse[] | select(
-          all(.hooks[]?.command // ""; 
-            contains("rules_hook.py --plan-enforcer") | not)
-        )]
-      else . end |
-      
-      # Remove rules Stop hooks
-      if .hooks.Stop then
-        .hooks.Stop = [.hooks.Stop[] | select(
-          all(.hooks[]?.command // ""; 
-            contains("rules_hook.py --commit-helper") | not)
-        )]
-      else . end |
-      
-      # Remove rules SessionStart hooks
-      if .hooks.SessionStart then
-        .hooks.SessionStart = [.hooks.SessionStart[] | select(
-          all(.hooks[]?.command // ""; 
-            contains("rules_hook.py --session-start") | not)
-        )]
-      else . end |
-      
-      # Clean up empty arrays
-      if (.hooks.UserPromptSubmit // []) == [] then del(.hooks.UserPromptSubmit) else . end |
-      if (.hooks.PreToolUse // []) == [] then del(.hooks.PreToolUse) else . end |
-      if (.hooks.Stop // []) == [] then del(.hooks.Stop) else . end |
-      if (.hooks.SessionStart // []) == [] then del(.hooks.SessionStart) else . end |
-      
-      # Clean up empty hooks object
-      if .hooks == {} then del(.hooks) else . end
-    ' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+    # Remove rules hooks from each hook type
+    remove_hooks_from_group "UserPromptSubmit" "rules_hook.py --prompt-validator"
+    remove_hooks_from_group "PreToolUse" "rules_hook.py --plan-enforcer"
+    remove_hooks_from_group "Stop" "rules_hook.py --commit-helper"
+    remove_hooks_from_group "SessionStart" "rules_hook.py --session-start"
     
     echo -e "${GREEN}✓${NC} Rules Hook removed"
     removed_rules=true
@@ -295,67 +180,27 @@ else
     echo "Keeping Rules Hook"
 fi
 
+# Clean up empty hooks object if everything was removed
+jq 'if .hooks == {} then del(.hooks) else . end' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+
+# Summary
 echo
-echo -e "${BLUE}=== Uninstall Summary ===${NC}"
+echo -e "${BLUE}=== Uninstallation Summary ===${NC}"
 echo
 
-# Show what was removed
-if [[ "$removed_indexer" == true || "$removed_helper" == true || "$removed_rules" == true ]]; then
-    echo -e "${GREEN}Removed hooks:${NC}"
-    
-    if [[ "$removed_indexer" == true ]]; then
-        echo -e "  ${GREEN}✓${NC} Indexer Hooks"
-        echo "      • Removed -i flag detection"
-        echo "      • Removed auto-indexing"
-        echo "      • Removed /index command"
-        echo "      • Removed index-analyzer subagent"
-    fi
-    
-    if [[ "$removed_helper" == true ]]; then
-        echo -e "  ${GREEN}✓${NC} Helper Hooks"
-        echo "      • Removed git status display"
-        echo "      • Removed safety checks"
-        echo "      • Removed session notifications"
-    fi
-    
-    if [[ "$removed_rules" == true ]]; then
-        echo -e "  ${GREEN}✓${NC} Rules Hook"
-        echo "      • Removed prompt validation"
-        echo "      • Removed plan enforcement"
-        echo "      • Removed commit helpers"
-    fi
-    
+if $removed_indexer || $removed_helper || $removed_rules; then
+    echo "Removed hooks:"
+    [[ "$removed_indexer" == true ]] && echo -e "  ${GREEN}✓${NC} Indexer Hooks"
+    [[ "$removed_helper" == true ]] && echo -e "  ${GREEN}✓${NC} Helper Hooks"
+    [[ "$removed_rules" == true ]] && echo -e "  ${GREEN}✓${NC} Rules Hook"
     echo
+    echo -e "${GREEN}Uninstallation complete!${NC}"
+    echo "Your settings have been backed up to: ${SETTINGS_FILE}.backup.uninstall.*"
+    echo
+    echo "To reinstall, run: ./install.sh"
 else
     echo "No hooks were removed."
 fi
 
-# Show what remains
-echo -e "${BLUE}Still installed:${NC}"
-
-if [[ "$removed_indexer" == false ]]; then
-    echo -e "  ${GREEN}•${NC} Indexer Hooks (active)"
-fi
-
-if [[ "$removed_helper" == false ]]; then
-    echo -e "  ${GREEN}•${NC} Helper Hooks (active)"
-fi
-
-if [[ "$removed_rules" == false ]]; then
-    echo -e "  ${GREEN}•${NC} Rules Hook (active)"
-fi
-
-if [[ "$removed_indexer" == true && "$removed_helper" == true && "$removed_rules" == true ]]; then
-    echo "  None - all hooks have been removed"
-fi
-
 echo
-echo -e "${YELLOW}📝 Note:${NC}"
-echo "   • Hook scripts remain at: $PROJECT_ROOT/.claude"
-echo "   • Backup saved as: ${SETTINGS_FILE}.uninstall-backup"
-echo
-echo "To reinstall hooks, run:"
-echo "   $PROJECT_ROOT/install.sh"
-echo
-echo "To restore from backup:"
-echo "   cp ${SETTINGS_FILE}.uninstall-backup $SETTINGS_FILE"
+echo -e "${BLUE}Thank you for using the Indexer Hook!${NC}"
