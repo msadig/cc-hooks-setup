@@ -4,6 +4,7 @@
       "summary": "All code must have tests with >80% coverage",
       "file": "testing-standards.md",
       "triggers": ["test", "testing", "coverage", "spec"],
+      "file_matchers": ["*.test.js", "*.test.ts", "*.spec.js", "*.spec.ts", "tests/**/*", "*_test.py", "test_*.py"],
       "priority": "high",
       "always_load_summary": false
     },
@@ -11,6 +12,7 @@
       "summary": "Follow clean code principles and linting rules",
       "file": "code-quality.md",
       "triggers": ["code", "quality", "lint", "clean"],
+      "file_matchers": ["*.tsx", "*.jsx", "*.ts", "*.js", "src/**/*.py", "components/**/*"],
       "priority": "medium",
       "always_load_summary": false
     },
@@ -18,6 +20,7 @@
       "summary": "Document all public APIs and complex logic",
       "file": "documentation.md",
       "triggers": ["docs", "document", "readme", "api"],
+      "file_matchers": ["README.md", "*.md", "docs/**/*", "CHANGELOG.md", "API.md"],
       "priority": "medium",
       "always_load_summary": false
     },
@@ -25,6 +28,7 @@
       "summary": "Follow security best practices, no secrets in code",
       "file": "security.md",
       "triggers": ["security", "auth", "password", "secret", "token"],
+      "file_matchers": ["*.env", ".env.*", "settings.py", "config.py", "config/*.json", "secrets/*", "**/auth/*"],
       "priority": "critical",
       "always_load_summary": true
     }

@@ -10,6 +10,7 @@ Uses flags to enable specific functionality and suggests agents based on trigger
 """
 import argparse
 import datetime
+import fnmatch
 import glob
 import json
 import os
@@ -454,6 +455,143 @@ def handle_commit_helper(input_data):
     
     return 0
 
+def handle_pretool_file_matcher(input_data):
+    """
+    Handle PreToolUse hook - loads rules based on file pattern matching
+    """
+    tool_name = input_data.get('tool_name', '')
+    tool_input = input_data.get('tool_input', {})
+    session_id = input_data.get('session_id', 'default')
+    
+    # Only process tools that work with files
+    if tool_name not in ['Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit']:
+        return 0
+    
+    # Extract file path from tool input
+    filepath = tool_input.get('file_path', '')
+    if not filepath:
+        return 0
+    
+    # Normalize the file path to be relative for pattern matching
+    if os.path.isabs(filepath):
+        try:
+            filepath = os.path.relpath(filepath, PROJECT_DIR)
+        except ValueError:
+            # If relpath fails, use the absolute path
+            pass
+    
+    # Check if manifest exists
+    manifest_path = os.path.join(PROJECT_DIR, '.claude/rules/manifest.json')
+    if not os.path.exists(manifest_path):
+        return 0
+    
+    # Load manifest
+    try:
+        with open(manifest_path, 'r') as f:
+            manifest = json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return 0
+    
+    # Build list of rules that match the file pattern
+    matched_rules = []
+    always_load_rules = []
+    matched_rule_names = set()
+    
+    for rule_name, rule_data in manifest.get('rules', {}).items():
+        priority = rule_data.get('priority', 'low')
+        always_load_summary = rule_data.get('always_load_summary', False)
+        file_matchers = rule_data.get('file_matchers', [])
+        
+        # Check if rule should always load summary
+        if always_load_summary:
+            always_load_rules.append({
+                'name': rule_name,
+                'data': rule_data,
+                'priority': priority,
+                'matched': False
+            })
+        
+        # Check if file matches any pattern
+        file_matched = False
+        for pattern in file_matchers:
+            # Handle both glob patterns and simple patterns
+            if fnmatch.fnmatch(filepath, pattern) or fnmatch.fnmatch(os.path.basename(filepath), pattern):
+                file_matched = True
+                break
+        
+        if file_matched:
+            matched_rules.append({
+                'name': rule_name,
+                'data': rule_data,
+                'priority': priority,
+                'matched': True
+            })
+            matched_rule_names.add(rule_name)
+    
+    # If no rules matched, return early
+    if not matched_rules and not always_load_rules:
+        return 0
+    
+    # Sort by priority (highest first)
+    matched_rules.sort(key=lambda x: PRIORITY_ORDER.get(x['priority'], 0), reverse=True)
+    always_load_rules.sort(key=lambda x: PRIORITY_ORDER.get(x['priority'], 0), reverse=True)
+    
+    # Combine lists (remove duplicates, keeping matched version)
+    matched_names = {r['name'] for r in matched_rules}
+    final_rules = matched_rules + [r for r in always_load_rules if r['name'] not in matched_names]
+    
+    if not final_rules:
+        return 0
+    
+    # Build output to provide as additional context
+    output_lines = []
+    output_lines.append(f"## File-Based Rules Loaded for: {filepath}")
+    output_lines.append("")
+    
+    if final_rules:
+        output_lines.append("### Applicable Rules")
+        output_lines.append("| Rule | Priority | Reason |")
+        output_lines.append("|------|----------|--------|")
+        
+        for rule in final_rules:
+            reason = "📁 File Pattern Match" if rule['matched'] else "📋 Always Loaded"
+            output_lines.append(f"| {rule['name'].title()} | {rule['priority'].upper()} | {reason} |")
+        
+        output_lines.append("")
+        output_lines.append("---")
+        output_lines.append("")
+    
+    # Load rule summaries based on priority
+    for rule in final_rules:
+        rule_data = rule['data']
+        priority = rule['priority']
+        matched = rule['matched']
+        summary = rule_data.get('summary', '')
+        file_path = rule_data.get('file', '')
+        
+        # For file-matched rules, show summary
+        if matched and summary:
+            output_lines.append(f"### 📁 {rule['name'].title()} [PRIORITY: {priority.upper()}]")
+            output_lines.append(f"**Summary:** {summary}")
+            if file_path:
+                output_lines.append(f"**Details:** See `.claude/rules/{file_path}` if needed")
+            output_lines.append("")
+    
+    # Join output
+    complete_output = '\n'.join(output_lines)
+    
+    # Return as JSON with additional context that Claude will see
+    if complete_output.strip():
+        output = {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "additionalContext": complete_output
+            }
+        }
+        print(json.dumps(output))
+    
+    return 0
+
 def handle_session_start(input_data):
     """
     Handle SessionStart hook - provides development context and project overview
@@ -563,6 +701,8 @@ def main():
                        help='Enable commit helper for changed files')
     parser.add_argument('--session-start', action='store_true',
                        help='Enable session start context loading')
+    parser.add_argument('--file-matcher', action='store_true',
+                       help='Enable file pattern-based rule loading for PreToolUse')
     args = parser.parse_args()
     
     # Read input from stdin
@@ -582,6 +722,8 @@ def main():
         exit_code = handle_prompt_validator(input_data)
     elif hook_event_name == 'PreToolUse' and args.plan_enforcer:
         exit_code = handle_plan_enforcer(input_data)
+    elif hook_event_name == 'PreToolUse' and args.file_matcher:
+        exit_code = handle_pretool_file_matcher(input_data)
     elif hook_event_name == 'Stop' and args.commit_helper:
         exit_code = handle_commit_helper(input_data)
     elif hook_event_name == 'SessionStart' and args.session_start:

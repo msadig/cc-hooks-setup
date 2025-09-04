@@ -17,13 +17,14 @@ A comprehensive hook system for Claude Code featuring rule enforcement, agent su
 - **Priority-Based Rule Loading**: Rules sorted by priority (critical > high > medium > low)
 - **Smart Context Management**: Shows summaries or full content based on priority and triggers
 - **Intelligent Agent Suggestions**: Automatically recommends specialized agents based on triggered rules
+- **File Pattern Matching**: Automatically loads relevant rules based on file types being edited (e.g., `*.test.js`, `settings.py`, `*.tsx`)
 - **Glob Pattern Context Loading**: Flexible file discovery using .gitignore-like patterns (`.claude/**/WORKFLOW.md`, `.claude/**/*-CONTEXT.md`)
 - **Consolidated Context Loading**: Unified approach for both UserPromptSubmit and SessionStart hooks
 - **Plan Enforcement**: Requires approved plans before code modifications
 - **File Tracking**: Tracks all modified files for testing and commit
 - **Generic Testing**: Works with any project type (JavaScript, Python, Go, etc.)
 - **Auto-Commit Support**: Prompts for testing and committing at session end
-- **Unified Hook Handler**: Single script (`rules_hook.py`) with flag-based routing (`--prompt-validator`, `--session-start`, `--plan-enforcer`, `--commit-helper`)
+- **Unified Hook Handler**: Single script (`rules_hook.py`) with flag-based routing (`--prompt-validator`, `--session-start`, `--plan-enforcer`, `--commit-helper`, `--file-matcher`)
 
 ### 📊 Indexer Hook System
 - **Automatic Indexing**: Generates comprehensive project maps including directory structure, function signatures, call graphs, and dependencies
