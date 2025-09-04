@@ -170,6 +170,7 @@ if [[ "$uninstall_rules" == "y" || "$uninstall_rules" == "Y" ]]; then
     
     # Remove rules hooks from each hook type
     remove_hooks_from_group "UserPromptSubmit" "rules_hook.py --prompt-validator"
+    remove_hooks_from_group "PreToolUse" "rules_hook.py --immutable-check"
     remove_hooks_from_group "PreToolUse" "rules_hook.py --plan-enforcer"
     remove_hooks_from_group "PreToolUse" "rules_hook.py --file-matcher"
     remove_hooks_from_group "Stop" "rules_hook.py --commit-helper"

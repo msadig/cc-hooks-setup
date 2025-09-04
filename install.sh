@@ -42,6 +42,7 @@ HELPER_HOOKS=(
 
 RULES_HOOKS=(
     "UserPromptSubmit" "--prompt-validator" 10
+    "PreToolUse" "--immutable-check" 5
     "PreToolUse" "--plan-enforcer" 5
     "PreToolUse" "--file-matcher" 5
     "Stop" "--commit-helper" 10

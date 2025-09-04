@@ -34,7 +34,7 @@
     }
   },
   "metadata": {
-    "version": "1.2.0",
+    "version": "1.2.1",
     "last_updated": "2025-01-03",
     "agent_integrations": {
       "testing-specialist": {
@@ -46,6 +46,23 @@
       "code-quality-expert": {
         "related_rules": ["code-quality", "documentation"]
       }
-    }
+    },
+    "immutable_files": [
+      ".claude/rules/manifest.json",
+      ".env",
+      ".env.*",
+      "*.env",
+      "**/.git/*",
+      ".git/**/*",
+      "*.key",
+      "*.pem",
+      "*.crt",
+      "*.pfx",
+      "**/.ssh/*",
+      "**/secrets/*",
+      "**/credentials/*",
+      "*.secret",
+      "private/*"
+    ]
   }
 }

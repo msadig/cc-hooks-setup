@@ -432,6 +432,90 @@ def handle_commit_helper(input_data):
     
     return 0
 
+def handle_immutable_files_check(input_data):
+    """
+    Handle PreToolUse hook - blocks editing of immutable files based on patterns
+    """
+    tool_name = input_data.get('tool_name', '')
+    tool_input = input_data.get('tool_input', {})
+    
+    # Only check for write/edit operations
+    if tool_name not in ['Write', 'Edit', 'MultiEdit', 'NotebookEdit']:
+        return 0
+    
+    # Extract file path from tool input
+    filepath = tool_input.get('file_path', '')
+    if not filepath:
+        return 0
+    
+    # Normalize the file path to be relative for pattern matching
+    original_filepath = filepath
+    if os.path.isabs(filepath):
+        try:
+            filepath = os.path.relpath(filepath, PROJECT_DIR)
+        except ValueError:
+            # If relpath fails, use the absolute path
+            pass
+    
+    # Check if manifest exists
+    manifest_path = os.path.join(PROJECT_DIR, '.claude/rules/manifest.json')
+    if not os.path.exists(manifest_path):
+        return 0
+    
+    # Load manifest
+    try:
+        with open(manifest_path, 'r') as f:
+            manifest = json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return 0
+    
+    # Get immutable file patterns
+    immutable_patterns = manifest.get('metadata', {}).get('immutable_files', [])
+    
+    if not immutable_patterns:
+        return 0
+    
+    # Check if file matches any immutable pattern
+    for pattern in immutable_patterns:
+        matched = False
+        
+        # Handle patterns with ** for recursive directory matching
+        if '**' in pattern:
+            # Convert glob pattern to work with fnmatch and pathlib
+            # For patterns like **/dir/* or **/.ssh/*
+            if pattern.startswith('**/'):
+                # Remove the **/ prefix and check if the path contains the rest
+                sub_pattern = pattern[3:]  # Remove **/
+                # Check if the sub-pattern matches anywhere in the path
+                if '/' in sub_pattern:
+                    # For patterns like .ssh/* or secrets/*
+                    dir_part = sub_pattern.split('/')[0]
+                    if f'/{dir_part}/' in f'/{filepath}' or filepath.startswith(f'{dir_part}/'):
+                        matched = True
+                else:
+                    # Simple pattern after **/
+                    if fnmatch.fnmatch(os.path.basename(filepath), sub_pattern):
+                        matched = True
+            else:
+                # Other ** patterns
+                import_pattern = pattern.replace('**/', '*/').replace('**', '*')
+                if fnmatch.fnmatch(filepath, import_pattern):
+                    matched = True
+        
+        # Check exact pattern match, basename match, and simple patterns
+        elif (fnmatch.fnmatch(filepath, pattern) or 
+              fnmatch.fnmatch(os.path.basename(filepath), pattern) or
+              (pattern.endswith('/*') and filepath.startswith(pattern[:-2] + '/')) or
+              (pattern.endswith('/**/*') and filepath.startswith(pattern[:-5] + '/'))):
+            matched = True
+        
+        if matched:
+            # Block the operation
+            print(f"🚫 BLOCKED: File '{original_filepath}' is immutable (matches pattern '{pattern}'). This file cannot be edited.", file=sys.stderr)
+            return 2  # Exit code 2 blocks the tool call
+    
+    return 0
+
 def handle_pretool_file_matcher(input_data):
     """
     Handle PreToolUse hook - loads rules based on file pattern matching
@@ -683,6 +767,8 @@ def main():
                        help='Enable session start context loading')
     parser.add_argument('--file-matcher', action='store_true',
                        help='Enable file pattern-based rule loading for PreToolUse')
+    parser.add_argument('--immutable-check', action='store_true',
+                       help='Enable immutable files protection for PreToolUse')
     args = parser.parse_args()
     
     # Read input from stdin
@@ -700,6 +786,8 @@ def main():
     
     if hook_event_name == 'UserPromptSubmit' and args.prompt_validator:
         exit_code = handle_prompt_validator(input_data)
+    elif hook_event_name == 'PreToolUse' and args.immutable_check:
+        exit_code = handle_immutable_files_check(input_data)
     elif hook_event_name == 'PreToolUse' and args.plan_enforcer:
         exit_code = handle_plan_enforcer(input_data)
     elif hook_event_name == 'PreToolUse' and args.file_matcher:
