@@ -190,91 +190,67 @@ def handle_prompt_validator(input_data):
         output_lines.append(always_load_context)
         output_lines.append("")
     
-    output_lines.append("## Project Rules Loaded")
+    output_lines.append("## Project Rules")
     output_lines.append("")
     
     if final_rules:
-        output_lines.append("### Rule Priority Summary")
-        output_lines.append("| Rule | Priority | Status |")
-        output_lines.append("|------|----------|--------|")
-        
+        # Group rules by priority using defaultdict
+        priority_groups = defaultdict(list)
         for rule in final_rules:
-            status = "✅ Triggered" if rule['matched'] else "📋 Always Loaded"
-            output_lines.append(f"| {rule['name'].title()} | {rule['priority'].upper()} | {status} |")
+            priority = rule['priority'].upper()
+            priority_groups[priority].append(rule)
         
-        output_lines.append("")
-        output_lines.append("---")
-        output_lines.append("")
+        # Output rules grouped by priority (highest first)
+        priority_order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']
+        for priority in priority_order:
+            if priority in priority_groups:
+                output_lines.append(f"### {priority}")
+                for rule in priority_groups[priority]:
+                    rule_name = rule['name'].replace('-', ' ').title()
+                    rule_data = rule['data']
+                    matched = rule['matched']
+                    summary = rule_data.get('summary', '')
+                    file_ref = rule_data.get('file', '')
+                    
+                    # Determine what to show based on priority and match status
+                    if priority == 'CRITICAL' and matched:
+                        # For critical rules that are triggered, load full content
+                        if file_ref:
+                            rule_path = os.path.join(PROJECT_DIR, '.claude/rules', file_ref)
+                            if os.path.exists(rule_path):
+                                try:
+                                    with open(rule_path, 'r') as f:
+                                        output_lines.append(f"#### {rule_name}")
+                                        output_lines.append(f.read().strip())
+                                        output_lines.append("")
+                                except IOError:
+                                    # Fallback to summary if can't read file
+                                    if summary:
+                                        output_lines.append(f"• {rule_name} - {summary} [@.claude/rules/{file_ref}]")
+                            else:
+                                # File doesn't exist, show summary
+                                if summary:
+                                    output_lines.append(f"• {rule_name} - {summary} [@.claude/rules/{file_ref}]")
+                        else:
+                            # No file ref, just show summary
+                            if summary:
+                                output_lines.append(f"• {rule_name} - {summary}")
+                    else:
+                        # For non-critical or non-matched rules, show summary with reference
+                        if summary:
+                            rule_line = f"• {rule_name} - {summary}"
+                            if file_ref:
+                                rule_line += f" [@.claude/rules/{file_ref}]"
+                            output_lines.append(rule_line)
+                        else:
+                            output_lines.append(f"• {rule_name}")
+                output_lines.append("")
     
-    # Load rules based on priority and loading matrix
-    for rule in final_rules:
-        rule_data = rule['data']
-        priority = rule['priority']
-        matched = rule['matched']
-        always_load = rule_data.get('always_load_summary', False)
-        summary = rule_data.get('summary', '')
-        file_path = rule_data.get('file', '')
-        
-        # Determine what to load based on matrix
-        load_full = False
-        load_summary = False
-        
-        if priority == 'critical':
-            # Critical: always show at least summary, full if triggered
-            load_summary = True
-            load_full = matched or always_load
-        elif priority == 'high':
-            # High: show summary if triggered or always_load
-            load_summary = matched or always_load
-            load_full = matched and not always_load
-        elif priority == 'medium':
-            # Medium: summary only when triggered
-            load_summary = matched
-        else:  # low
-            # Low: reference only when triggered
-            load_summary = matched
-        
-        # Output based on decision
-        if load_full and file_path:
-            # Load full content
-            rule_path = os.path.join(PROJECT_DIR, '.claude/rules', file_path)
-            if os.path.exists(rule_path):
-                try:
-                    with open(rule_path, 'r') as f:
-                        output_lines.append(f"### 📚 {rule['name'].title()} [PRIORITY: {priority.upper()}]")
-                        output_lines.append("")
-                        output_lines.append(f.read().strip())
-                        output_lines.append("")
-                        output_lines.append("---")
-                        output_lines.append("")
-                except IOError:
-                    pass
-        elif load_summary and summary:
-            # Show summary only
-            output_lines.append(f"### 📝 {rule['name'].title()} [PRIORITY: {priority.upper()}]")
-            output_lines.append(f"**Summary:** {summary}")
-            if file_path:
-                output_lines.append(f"**Details:** See `.claude/rules/{file_path}` if needed")
-            output_lines.append("")
-            output_lines.append("---")
-            output_lines.append("")
-    
-    # Add agent suggestions if any
+    # Add agent suggestions if any  
     if agent_suggestions:
-        output_lines.append("## 🤖 Recommended Agents")
-        output_lines.append("")
-        output_lines.append("Based on the triggered rules, consider using these specialized agents:")
-        output_lines.append("")
-        
-        for agent_name, agent_info in agent_suggestions.items():
-            output_lines.append(f"### **{agent_name}**")
-            output_lines.append(f"Suggested because you mentioned: {', '.join(agent_info['related_rules'])}")
-            output_lines.append("")
-        
-        output_lines.append("💡 **Tip**: Use these agents proactively by mentioning them in your requests")
-        output_lines.append("Example: 'Use the {agent_name} agent to...'")
-        output_lines.append("")
-        output_lines.append("---")
+        output_lines.append("### 🤖 Suggested Agents")
+        for agent_name in agent_suggestions.keys():
+            output_lines.append(f"• **{agent_name}** - Use for specialized {agent_name.replace('-', ' ')}")
         output_lines.append("")
     
     # Join all output lines
