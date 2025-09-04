@@ -24,39 +24,40 @@ if git rev-parse --git-dir > /dev/null 2>&1; then
 fi
 
 # Model-specific context limits (in tokens)
-# Based on official Claude model specifications
+# These are USABLE limits (80% of theoretical before auto-compact triggers)
 get_context_limit() {
     local model_id="$1"
+    local model_display="$2"
     
-    # Claude Opus 4.1 - 200k context
-    if [[ "$model_id" == *"claude-opus-4-1"* ]]; then
-        echo 200000
-    # Claude 3.5 Sonnet (October 2024) - 200k context
-    elif [[ "$model_id" == *"claude-3-5-sonnet"* ]]; then
-        echo 200000
-    # Claude 3 Opus - 200k context
-    elif [[ "$model_id" == *"claude-3-opus"* ]]; then
-        echo 200000
-    # Claude 3 Haiku - 200k context  
-    elif [[ "$model_id" == *"claude-3-haiku"* ]]; then
-        echo 200000
-    # Claude 2.1 - 200k context
+    # Claude 3.5 Sonnet models have 1M theoretical, 800k usable
+    if [[ "$model_id" == *"claude-3-5-sonnet"* ]] || [[ "$model_display" == *"Sonnet"* ]]; then
+        echo 800000  # 80% of 1M
+    # Claude Opus 4.1 - 200k theoretical, 160k usable
+    elif [[ "$model_id" == *"claude-opus-4-1"* ]]; then
+        echo 160000  # 80% of 200k
+    # Claude 3 Opus - 200k theoretical, 160k usable
+    elif [[ "$model_id" == *"claude-3-opus"* ]] || [[ "$model_display" == *"Opus"* ]]; then
+        echo 160000  # 80% of 200k
+    # Claude 3 Haiku - 200k theoretical, 160k usable
+    elif [[ "$model_id" == *"claude-3-haiku"* ]] || [[ "$model_display" == *"Haiku"* ]]; then
+        echo 160000  # 80% of 200k
+    # Claude 2.1 - 200k theoretical, 160k usable
     elif [[ "$model_id" == *"claude-2.1"* ]]; then
-        echo 200000
-    # Claude 2.0 - 100k context
+        echo 160000  # 80% of 200k
+    # Claude 2.0 - 100k theoretical, 80k usable
     elif [[ "$model_id" == *"claude-2.0"* ]]; then
-        echo 100000
-    # Claude Instant - 100k context
+        echo 80000   # 80% of 100k
+    # Claude Instant - 100k theoretical, 80k usable
     elif [[ "$model_id" == *"claude-instant"* ]]; then
-        echo 100000
-    # Default fallback for unknown models
+        echo 80000   # 80% of 100k
+    # Default fallback - assume 200k theoretical, 160k usable
     else
-        echo 200000
+        echo 160000  # 80% of 200k
     fi
 }
 
 # Get the context limit for the current model
-CONTEXT_LIMIT=$(get_context_limit "$MODEL_ID")
+CONTEXT_LIMIT=$(get_context_limit "$MODEL_ID" "$MODEL_DISPLAY")
 
 # Improved token estimation algorithm
 # More accurate approximation based on Claude's actual tokenization
@@ -201,5 +202,5 @@ PROGRESS_BAR=$(create_progress_bar "$CONTEXT_PCT")
 # Build two-line status display
 # Line 1: Keep original format with project/directory info
 echo "[$MODEL_DISPLAY] 🎯 ${PROJECT_DIR##*/}: 📁 ${CURRENT_DIR##*/}${GIT_BRANCH}"
-# Line 2: Enhanced with visual progress bar, model context size, reset time, cost per hour, and tokens per minute
-echo -e "🧠 ${CONTEXT_COLOR}${PROGRESS_BAR} ${CONTEXT_PCT}% of ${CONTEXT_DISPLAY}k${RESET_COLOR} ${TIME_COLOR}⏳${RESET_TIME_DISPLAY} ${COST_COLOR}💰\$${COST_DISPLAY}${COST_PER_HOUR} 📊${METRIC_COLOR}${ESTIMATED_TOKENS}tok${TPM}${RESET_COLOR}"
+# Line 2: Enhanced with visual progress bar, time until reset, model context size, cost info
+echo -e "🧠 ${CONTEXT_COLOR}${PROGRESS_BAR} ${CONTEXT_PCT}% of ${CONTEXT_DISPLAY}k${RESET_COLOR} ${TIME_COLOR}(⏳ ${RESET_TIME} until reset @ ${RESET_TIME_DISPLAY})${RESET_COLOR} ${COST_COLOR}💰\$${COST_DISPLAY}${COST_PER_HOUR} 📊${METRIC_COLOR} ${ESTIMATED_TOKENS} tok${TPM}${RESET_COLOR}"
