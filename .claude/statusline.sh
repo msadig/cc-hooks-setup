@@ -69,10 +69,12 @@ fi
 CONTEXT_REMAINING=$((CONTEXT_LIMIT - SESSION_TOKENS))
 CONTEXT_PCT=$((CONTEXT_REMAINING * 100 / CONTEXT_LIMIT))
 
-# Estimate time until context reset (assuming 1000 tokens per minute of active use)
-MINUTES_REMAINING=$((CONTEXT_REMAINING / 1000))
-HOURS=$((MINUTES_REMAINING / 60))
-MINS=$((MINUTES_REMAINING % 60))
+# Context limit warning thresholds (Claude auto-compacts at 95%)
+COMPACT_THRESHOLD=95
+WARNING_THRESHOLD=80
+
+# Calculate context usage percentage
+CONTEXT_USED_PCT=$((SESSION_TOKENS * 100 / CONTEXT_LIMIT))
 
 # Format cost display
 if (( $(echo "$TOTAL_COST < 0.01" | bc -l 2>/dev/null || echo "1") )); then
@@ -93,13 +95,13 @@ else
     DURATION_DISPLAY="${DURATION_SEC}s"
 fi
 
-# Color coding for context remaining
-if [ $CONTEXT_PCT -gt 50 ]; then
-    CONTEXT_COLOR="\033[32m"  # Green
-elif [ $CONTEXT_PCT -gt 20 ]; then
-    CONTEXT_COLOR="\033[33m"  # Yellow
+# Color coding based on context usage (not remaining)
+if [ $CONTEXT_USED_PCT -lt $WARNING_THRESHOLD ]; then
+    CONTEXT_COLOR="\033[32m"  # Green - safe usage
+elif [ $CONTEXT_USED_PCT -lt $COMPACT_THRESHOLD ]; then
+    CONTEXT_COLOR="\033[33m"  # Yellow - approaching auto-compact
 else
-    CONTEXT_COLOR="\033[31m"  # Red
+    CONTEXT_COLOR="\033[31m"  # Red - will auto-compact soon
 fi
 RESET_COLOR="\033[0m"  # Reset color
 
@@ -117,18 +119,36 @@ else
     DIR_DISPLAY="🎯 $PROJECT_NAME: 📁 $CURRENT_NAME"
 fi
 
-# Time until reset display
-if [ $HOURS -gt 0 ]; then
-    RESET_TIME="${HOURS}h ${MINS}m"
+# Context status message
+if [ $CONTEXT_USED_PCT -ge $COMPACT_THRESHOLD ]; then
+    CONTEXT_STATUS="auto-compact soon"
+elif [ $CONTEXT_USED_PCT -ge $WARNING_THRESHOLD ]; then
+    CONTEXT_STATUS="approaching limit"
 else
-    RESET_TIME="${MINS}m"
+    CONTEXT_STATUS="healthy"
 fi
 
-# Calculate actual reset time
+# Global rate limit reset calculation (most APIs reset hourly)
 CURRENT_EPOCH=$(date +%s)
-RESET_EPOCH=$((CURRENT_EPOCH + (MINUTES_REMAINING * 60)))
-# Handle both macOS (date -r) and Linux (date -d) formats
-RESET_TIME_DISPLAY=$(date -r $RESET_EPOCH +"%H:%M" 2>/dev/null || date -d "@$RESET_EPOCH" +"%H:%M" 2>/dev/null || echo "??:??")
+CURRENT_HOUR=$(date +%H)
+CURRENT_MINUTE=$(date +%M)
+
+# Calculate next hour reset
+NEXT_HOUR=$(( (CURRENT_HOUR + 1) % 24 ))
+MINUTES_TO_RESET=$(( 60 - CURRENT_MINUTE ))
+
+# Format global reset time
+if [ $MINUTES_TO_RESET -eq 60 ] || [ $MINUTES_TO_RESET -eq 0 ]; then
+    GLOBAL_RESET="now"
+elif [ $MINUTES_TO_RESET -gt 0 ] && [ $MINUTES_TO_RESET -lt 60 ]; then
+    GLOBAL_RESET="${MINUTES_TO_RESET}m"
+else
+    GLOBAL_RESET="1m"  # Fallback for edge cases
+fi
+
+# Calculate next reset time
+RESET_EPOCH=$(( CURRENT_EPOCH + (MINUTES_TO_RESET * 60) ))
+GLOBAL_RESET_TIME=$(date -r $RESET_EPOCH +"%H:%M" 2>/dev/null || date -d "@$RESET_EPOCH" +"%H:%M" 2>/dev/null || echo "??:??")
 
 # Calculate cost per hour if duration is significant
 COST_PER_HOUR=""
@@ -152,11 +172,11 @@ fi
 # Format context size for display (200k, 100k, etc)
 CONTEXT_DISPLAY=$(( CONTEXT_LIMIT / 1000 ))
 
-# Create a simple progress bar for context usage
+# Create a simple progress bar for context usage (shows used, not remaining)
 create_progress_bar() {
-    local percent=$1
+    local used_percent=$1
     local width=20
-    local filled=$(( (100 - percent) * width / 100 ))
+    local filled=$(( used_percent * width / 100 ))
     local empty=$(( width - filled ))
     
     local bar="["
@@ -171,10 +191,10 @@ create_progress_bar() {
     echo "$bar"
 }
 
-PROGRESS_BAR=$(create_progress_bar "$CONTEXT_PCT")
+PROGRESS_BAR=$(create_progress_bar "$CONTEXT_USED_PCT")
 
 # Build two-line status display
 # Line 1: Keep original format with project/directory info
 echo "[$MODEL_DISPLAY] 🎯 ${PROJECT_DIR##*/}: 📁 ${CURRENT_DIR##*/}${GIT_BRANCH}"
-# Line 2: Enhanced with visual progress bar, time until reset, model context size, cost info
-echo -e "🧠 ${CONTEXT_COLOR}${PROGRESS_BAR} ${CONTEXT_PCT}% of ${CONTEXT_DISPLAY}k${RESET_COLOR} ${TIME_COLOR}(⏳ ${RESET_TIME} until reset @ ${RESET_TIME_DISPLAY})${RESET_COLOR} ${COST_COLOR}💰\$${COST_DISPLAY}${COST_PER_HOUR} 📊${METRIC_COLOR} ${SESSION_TOKENS} tok${TPM}${RESET_COLOR}"
+# Line 2: Session context + Global limits + Cost info
+echo -e "🧠 ${CONTEXT_COLOR}${PROGRESS_BAR} ${CONTEXT_USED_PCT}% of ${CONTEXT_DISPLAY}k (${CONTEXT_STATUS})${RESET_COLOR} ${TIME_COLOR}⏳ Global limits reset in ${GLOBAL_RESET} @ ${GLOBAL_RESET_TIME}${RESET_COLOR} ${COST_COLOR}💰\$${COST_DISPLAY}${COST_PER_HOUR}${RESET_COLOR} ${METRIC_COLOR}📊 ${SESSION_TOKENS} tok${TPM}${RESET_COLOR}"
