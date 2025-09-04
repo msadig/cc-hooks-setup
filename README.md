@@ -24,7 +24,9 @@ A comprehensive hook system for Claude Code featuring rule enforcement, agent su
 - **File Tracking**: Tracks all modified files for testing and commit
 - **Generic Testing**: Works with any project type (JavaScript, Python, Go, etc.)
 - **Auto-Commit Support**: Prompts for testing and committing at session end
-- **Unified Hook Handler**: Single script (`rules_hook.py`) with flag-based routing (`--prompt-validator`, `--session-start`, `--plan-enforcer`, `--commit-helper`, `--file-matcher`)
+- **Immutable Files Protection**: Prevents editing of sensitive files based on configurable patterns
+- **PreToolUse File Matcher**: Loads relevant rules when working with specific file patterns
+- **Unified Hook Handler**: Single script (`rules_hook.py`) with flag-based routing (`--prompt-validator`, `--session-start`, `--plan-enforcer`, `--commit-helper`, `--file-matcher`, `--immutable-check`)
 
 ### 📊 Indexer Hook System
 - **Automatic Indexing**: Generates comprehensive project maps including directory structure, function signatures, call graphs, and dependencies
@@ -129,6 +131,20 @@ At session end, `rules_hook.py --commit-helper`:
 - Reviews all changed files tracked during the session
 - Prompts for appropriate testing and validation
 - Assists with descriptive commit messages
+
+### 4. File Pattern Matching (PreToolUse)
+When working with files, `rules_hook.py --file-matcher`:
+- Detects file patterns during Read/Write/Edit operations
+- Automatically loads rules matching the file type
+- Provides context-aware guidance based on file patterns
+- Groups rules by priority for clear presentation
+
+### 5. Immutable Files Protection (PreToolUse)
+Before file modifications, `rules_hook.py --immutable-check`:
+- Checks if file matches immutable patterns defined in manifest.json
+- Blocks editing of sensitive files (e.g., `.ssh/*`, `*.key`, `*.pem`)
+- Supports glob patterns including recursive directory matching (`**/`)
+- Provides clear error messages when blocking operations
 
 ### 4. Indexer System Usage
 The indexer hooks provide intelligent code analysis:
@@ -243,6 +259,65 @@ When you see an agent suggestion, you can use it by mentioning it in your next p
 
 For more details, see [AGENT_RECOMMENDATIONS.md](./AGENT_RECOMMENDATIONS.md)
 
+## Immutable Files Protection
+
+The system can protect sensitive files from being edited through configurable patterns in `manifest.json`:
+
+### How It Works
+1. Define patterns in `.claude/rules/manifest.json` under `metadata.immutable_files`
+2. The hook checks every write/edit operation against these patterns
+3. Operations are blocked with a clear error message if a match is found
+
+### Pattern Examples
+```json
+"immutable_files": [
+  "**/.ssh/*",        // Protect all SSH files in any .ssh directory
+  "*.key",            // Protect all private key files
+  "*.pem",            // Protect all PEM certificate files
+  "**/secrets/*",     // Protect all files in any secrets directory
+  "*.env.production", // Protect production environment files
+  "**/.git/config",   // Protect git configuration
+  "**/node_modules/*" // Prevent editing dependencies
+]
+```
+
+### Supported Pattern Types
+- **Exact match**: `config.json`
+- **Wildcard**: `*.key`, `test_*.py`
+- **Directory**: `secrets/*`
+- **Recursive**: `**/.ssh/*`, `**/private/*`
+- **Multiple levels**: `src/**/*.test.js`
+
+This feature helps prevent accidental modification of critical system files, credentials, and sensitive configuration.
+
+## File Pattern-Based Rule Loading
+
+The system can automatically load rules when you're working with specific file types:
+
+### How It Works
+1. Define `file_matchers` in your rule definition in `manifest.json`
+2. When you read/write/edit a file, matching rules are automatically loaded
+3. Rules are presented grouped by priority with helpful context
+
+### Configuration Example
+```json
+"testing-standards": {
+  "summary": "Testing requirements and standards",
+  "file": "testing-standards.md",
+  "triggers": ["test", "testing", "coverage"],
+  "file_matchers": ["*.test.js", "*.spec.ts", "test_*.py", "**/tests/*"],
+  "priority": "high"
+}
+```
+
+### Use Cases
+- **Testing Files**: Load testing standards when editing test files
+- **Configuration Files**: Load security rules when editing config files
+- **API Files**: Load API documentation rules when editing endpoints
+- **Component Files**: Load frontend standards when editing React/Vue components
+
+This ensures developers see relevant rules exactly when they need them, improving compliance and code quality.
+
 ## Adding New Rules
 
 1. Edit `.claude/rules/manifest.json` to add a new rule:
@@ -254,7 +329,8 @@ For more details, see [AGENT_RECOMMENDATIONS.md](./AGENT_RECOMMENDATIONS.md)
       "file": "new-rule.md",
       "triggers": ["keyword1", "keyword2"],
       "priority": "high",
-      "always_load_summary": false
+      "always_load_summary": false,
+      "file_matchers": ["*.test.js", "*.spec.ts"]  // Optional: load rule for specific file patterns
     }
   },
   "metadata": {
@@ -262,7 +338,14 @@ For more details, see [AGENT_RECOMMENDATIONS.md](./AGENT_RECOMMENDATIONS.md)
       "specialist-agent": {
         "related_rules": ["new-rule"]  // Simple: just map agent to rule
       }
-    }
+    },
+    "immutable_files": [  // Optional: patterns for files that cannot be edited
+      "**/.ssh/*",
+      "*.key",
+      "*.pem",
+      "**/secrets/*",
+      "*.env.production"
+    ]
   }
 }
 ```
@@ -327,10 +410,22 @@ The hooks and statusline are configured in `.claude/settings.json` with a unifie
       }]
     }],
     "PreToolUse": [{
+      "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+      "hooks": [{
+        "type": "command",
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --immutable-check"
+      }]
+    }, {
       "matcher": "Write|Edit|MultiEdit",
       "hooks": [{
         "type": "command",
         "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --plan-enforcer"
+      }]
+    }, {
+      "matcher": "Read|Write|Edit|MultiEdit|NotebookEdit",
+      "hooks": [{
+        "type": "command",
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --file-matcher"
       }]
     }, {
       "matcher": "Bash",
@@ -353,10 +448,17 @@ The hooks and statusline are configured in `.claude/settings.json` with a unifie
 ```
 
 ### Hook Architecture
-- **Unified Handler**: `rules_hook.py` handles all rule enforcement, context loading, plan enforcement, and commit assistance
+- **Unified Handler**: `rules_hook.py` handles all rule enforcement, context loading, plan enforcement, commit assistance, file pattern matching, and immutable files protection
 - **Helper Functions**: `helper_hooks.py` provides logging, notifications, and TTS announcements
-- **Flag-Based Routing**: Single script with specific flags for different hook events
+- **Flag-Based Routing**: Single script with specific flags for different hook events:
+  - `--prompt-validator`: Loads rules based on keywords in user prompts
+  - `--session-start`: Provides project context at session start
+  - `--plan-enforcer`: Enforces planning before file modifications
+  - `--commit-helper`: Assists with testing and committing changes
+  - `--file-matcher`: Loads rules based on file patterns being edited
+  - `--immutable-check`: Prevents editing of sensitive files
 - **Environment Variables**: Uses `$CLAUDE_PROJECT_DIR` for project-relative paths
+- **Session Management**: Tracks state per session in `.claude/sessions/[session-id]/`
 
 ## Principles
 
