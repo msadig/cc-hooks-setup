@@ -564,11 +564,23 @@ def handle_pretool_file_matcher(input_data):
             for rule in priority_groups[priority]:
                 rule_name = rule['name'].replace('-', ' ').title()
                 summary = rule['data'].get('summary', '')
+                file_ref = rule['data'].get('file', '')
+                
+                # Build the rule line with summary
                 if summary:
-                    output_lines.append(f"• {rule_name} - {summary}")
+                    rule_line = f"• {rule_name} - {summary}"
                 else:
-                    output_lines.append(f"• {rule_name}")
+                    rule_line = f"• {rule_name}"
+                
+                # Add file reference if available
+                if file_ref:
+                    rule_line += f" [@.claude/rules/{file_ref}]"
+                
+                output_lines.append(rule_line)
             output_lines.append("")
+    
+    # Add footer hint for Claude
+    output_lines.append("💡 Reference [@filename] to see full rule details when needed")
     
     # Join output
     complete_output = '\n'.join(output_lines)
