@@ -119,18 +119,28 @@ def create_timestamped_backup(settings_file: Path):
         old_backup.unlink()
 
 
-def hook_exists(hook_type: str, script_path: Path, command_args: str, settings: Dict) -> bool:
+def hook_exists(hook_type: str, script_path: Path, command_args: str, settings: Dict, is_project_local: bool = False) -> bool:
     """Check if a specific hook already exists"""
     hooks_list = settings.get('hooks', {}).get(hook_type, [])
     
-    # Build the full command
-    full_command = f"uv run {script_path} {command_args}".strip()
+    # Build the full commands to check (both absolute and $CLAUDE_PROJECT_DIR versions)
+    commands_to_check = []
+    
+    # Add absolute path version
+    commands_to_check.append(f"uv run {script_path} {command_args}".strip())
+    
+    # Add $CLAUDE_PROJECT_DIR version for project-local hooks
+    if is_project_local:
+        commands_to_check.append(f"uv run $CLAUDE_PROJECT_DIR/.claude/hooks/{script_path.name} {command_args}".strip())
     
     # Check all hooks in all groups
     for group in hooks_list:
         for hook in group.get('hooks', []):
-            if hook.get('command') == full_command:
-                return True
+            hook_command = hook.get('command', '')
+            # Check if the existing hook matches any of our command variations
+            for cmd in commands_to_check:
+                if hook_command == cmd:
+                    return True
     
     return False
 
@@ -162,7 +172,7 @@ def add_hooks_to_settings(
     # Process hooks
     for hook_type, command_args, timeout, matcher in hooks_config:
         # Check if this hook already exists
-        if hook_exists(hook_type, script_path, command_args, settings):
+        if hook_exists(hook_type, script_path, command_args, settings, is_project_local):
             print(f"   • {hook_type} hook already exists, skipping")
             hooks_skipped += 1
             continue
@@ -172,9 +182,17 @@ def add_hooks_to_settings(
             settings['hooks'][hook_type] = []
         
         # Build hook configuration
+        # For project-local hooks, use $CLAUDE_PROJECT_DIR for portability
+        if is_project_local:
+            # Convert absolute path to relative from project root
+            hook_command = f"uv run $CLAUDE_PROJECT_DIR/.claude/hooks/{script_path.name} {command_args}".strip()
+        else:
+            # For global hooks, keep absolute path
+            hook_command = f"uv run {script_path} {command_args}".strip()
+        
         hook_config = {
             "type": "command",
-            "command": f"uv run {script_path} {command_args}".strip(),
+            "command": hook_command,
             "timeout": timeout
         }
         
