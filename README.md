@@ -36,11 +36,52 @@ A comprehensive hook system for Claude Code featuring rule enforcement, agent su
 - **Smart Caching**: Regenerates indices only when files change or size requirements differ
 - **Hook Integration**: Seamlessly integrates with Claude Code's hook system
 
+## Enhanced Features
+
+### 🎤 Text-to-Speech (TTS) System
+- **Multiple Provider Support**: Automatically selects the best available TTS provider
+- **Priority-based Selection**: 
+  1. **ElevenLabs** (highest quality, requires API key)
+  2. **OpenAI** (fast and reliable, requires API key)
+  3. **pyttsx3** (offline fallback, no API needed)
+- **Automatic Fallback**: Seamlessly switches to available providers
+- **Session Announcements**: Optional voice notifications for session events
+
+### 🤖 LLM Integration Utilities
+- **OpenAI Integration** (`utils/llm/oai.py`):
+  - Fast completions using gpt-4.1-nano
+  - Session completion messages
+  - Context-aware responses
+- **Anthropic Integration** (`utils/llm/anth.py`):
+  - Claude model support
+  - Advanced reasoning capabilities
+- **Flexible API Management**: Environment variable-based configuration
+
+### 🧪 Comprehensive Testing Infrastructure
+- **Full Test Coverage**: Test files for all major components
+- **Module-specific Tests**:
+  - `test_rules_hook.py`: Rule enforcement testing
+  - `test_helper_hooks.py`: Helper function validation
+  - `test_indexer_hook.py`: Indexer functionality tests
+  - Individual tests for utils modules
+- **Easy Test Execution**: All tests run via `uv run`
+
+### ⚡ Performance & Reliability
+- **Timeout Configuration**: Customizable timeouts for each hook type
+- **Project-local Hook Support**: Enhanced `hook_exists` function for better discovery
+- **Improved Command Checking**: More robust command availability detection
+- **Modern Python Features**: Type hints, f-strings, match statements (Python 3.11+)
+
 ## Installation
 
 ### Prerequisites
+- **Python 3.11+**: Required for modern syntax features and type hints
 - **UV**: Python package and project manager ([installation guide](https://github.com/astral-sh/uv))
 - **jq**: JSON processor (for indexer functionality)
+- **Optional API Keys** (for enhanced features):
+  - `ELEVENLABS_API_KEY`: For ElevenLabs TTS support
+  - `OPENAI_API_KEY`: For OpenAI TTS and LLM features
+  - `ANTHROPIC_API_KEY`: For Anthropic LLM features
 
 ### Rule Enforcement System (Already Active)
 1. The hooks are already set up in `.claude/hooks/`
@@ -74,15 +115,25 @@ The installer will:
 ├── statusline.sh                 # Enhanced two-line status display
 ├── hooks/
 │   ├── rules_hook.py             # Rule enforcement and agent suggestions
-│   ├── helper_hooks.py           # Session and utility hooks
+│   ├── helper_hooks.py           # Unified hook helper with all functionality
 │   ├── indexer_hook.py           # Main indexer with flag routing  
+│   ├── test_rules_hook.py        # Rule enforcement test suite
+│   ├── test_helper_hooks.py      # Helper hooks test suite
 │   ├── test_indexer_hook.py      # Indexer test suite
-│   └── utils/indexer/
-│       ├── project_utils.py      # Project discovery and Git ops
-│       ├── code_parsing.py       # Multi-language code analysis
-│       ├── flag_hook.py          # Flag detection and processing
-│       ├── project_indexer.py    # Core indexing and compression
-│       └── test_*.py            # Test suites for all modules
+│   └── utils/
+│       ├── llm/                  # LLM integration utilities
+│       │   ├── oai.py            # OpenAI integration
+│       │   └── anth.py           # Anthropic integration
+│       ├── tts/                  # Text-to-Speech providers
+│       │   ├── elevenlabs_tts.py # ElevenLabs TTS (priority 1)
+│       │   ├── openai_tts.py     # OpenAI TTS (priority 2)
+│       │   └── pyttsx3_tts.py    # Offline TTS (fallback)
+│       └── indexer/
+│           ├── project_utils.py   # Project discovery and Git ops
+│           ├── code_parsing.py    # Multi-language code analysis
+│           ├── flag_hook.py       # Flag detection and processing
+│           ├── project_indexer.py # Core indexing and compression
+│           └── test_*.py          # Test suites for all modules
 ├── agents/
 │   └── index-analyzer.md         # Subagent for codebase analysis
 ├── rules/
@@ -118,7 +169,7 @@ The installer will:
   - `.claude/**/*-WORKFLOW.md`, `.claude/**/*-CONTEXT.md`
   - `TODO.md`, `.github/ISSUE_TEMPLATE.md`
 - **Session Information**: Provides session details and project context
-- **TTS Announcements**: Works with `helper_hooks.py` for audio notifications
+- **Optional TTS Announcements**: Can be configured with `helper_hooks.py session_start --announce`
 
 ### 2. Plan Enforcement (PreToolUse)
 Before file modifications, `rules_hook.py --plan-enforcer`:
@@ -354,10 +405,13 @@ This ensures developers see relevant rules exactly when they need them, improvin
 
 ## Testing
 
-Run the test suite using UV (Python package manager):
+Run the comprehensive test suite using UV (Python package manager):
 ```bash
 # Test rule enforcement and hook system
 uv run .claude/hooks/test_rules_hook.py
+
+# Test helper hooks functionality
+uv run .claude/hooks/test_helper_hooks.py
 
 # Test indexer functionality
 uv run .claude/hooks/test_indexer_hook.py
@@ -365,9 +419,10 @@ uv run .claude/hooks/test_indexer_hook.py
 # Run specific test modules
 uv run .claude/hooks/utils/indexer/test_project_utils.py
 uv run .claude/hooks/utils/indexer/test_code_parsing.py
+uv run .claude/hooks/utils/indexer/test_flag_hook.py
 ```
 
-**Note**: All Python scripts in this project use `uv` for dependency management and execution.
+**Note**: All Python scripts in this project use `uv` for dependency management and execution. Tests cover all major components including TTS integration, LLM utilities, and hook routing.
 
 ## Manual Workflow
 
@@ -397,50 +452,43 @@ The hooks and statusline are configured in `.claude/settings.json` with a unifie
     "UserPromptSubmit": [{
       "hooks": [{
         "type": "command",
-        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --prompt-validator"
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --prompt-validator",
+        "timeout": 10
       }]
     }],
     "SessionStart": [{
       "hooks": [{
         "type": "command",
-        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --session-start"
-      }, {
-        "type": "command",
-        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/helper_hooks.py session_start --announce"
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --session-start",
+        "timeout": 10
       }]
     }],
     "PreToolUse": [{
       "matcher": "Write|Edit|MultiEdit|NotebookEdit",
       "hooks": [{
         "type": "command",
-        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --immutable-check"
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --immutable-check",
+        "timeout": 5
       }]
     }, {
-      "matcher": "Write|Edit|MultiEdit",
       "hooks": [{
         "type": "command",
-        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --plan-enforcer"
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --plan-enforcer",
+        "timeout": 5
       }]
     }, {
       "matcher": "Read|Write|Edit|MultiEdit|NotebookEdit",
       "hooks": [{
         "type": "command",
-        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --file-matcher"
-      }]
-    }, {
-      "matcher": "Bash",
-      "hooks": [{
-        "type": "command",
-        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/helper_hooks.py pre_tool_use --log"
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --file-matcher",
+        "timeout": 5
       }]
     }],
     "Stop": [{
       "hooks": [{
         "type": "command",
-        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --commit-helper"
-      }, {
-        "type": "command",
-        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/helper_hooks.py stop --announce"
+        "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --commit-helper",
+        "timeout": 10
       }]
     }]
   }
@@ -449,8 +497,8 @@ The hooks and statusline are configured in `.claude/settings.json` with a unifie
 
 ### Hook Architecture
 - **Unified Handler**: `rules_hook.py` handles all rule enforcement, context loading, plan enforcement, commit assistance, file pattern matching, and immutable files protection
-- **Helper Functions**: `helper_hooks.py` provides logging, notifications, and TTS announcements
-- **Flag-Based Routing**: Single script with specific flags for different hook events:
+- **Helper Functions**: `helper_hooks.py` provides a unified interface for all utility hooks with modernized Python 3.11+ syntax
+- **Flag-Based Routing**: Scripts use specific flags for different hook events:
   - `--prompt-validator`: Loads rules based on keywords in user prompts
   - `--session-start`: Provides project context at session start
   - `--plan-enforcer`: Enforces planning before file modifications
@@ -459,14 +507,20 @@ The hooks and statusline are configured in `.claude/settings.json` with a unifie
   - `--immutable-check`: Prevents editing of sensitive files
 - **Environment Variables**: Uses `$CLAUDE_PROJECT_DIR` for project-relative paths
 - **Session Management**: Tracks state per session in `.claude/sessions/[session-id]/`
+- **Timeout Configuration**: Each hook has configurable timeout settings for reliability
+- **TTS Integration**: Automatic provider selection based on available API keys
+- **LLM Support**: Optional AI-powered messages and completions
 
 ## Principles
 
 - **K.I.S.S.**: Simple file-based state management
-- **No OOP**: All scripts use simple functions
-- **Generic**: Works with any project type
-- **Unified**: Single hook script with flag-based routing
+- **Modern Python**: Leverages Python 3.11+ features (type hints, f-strings, match statements)
+- **No OOP**: All scripts use simple functions for maintainability
+- **Generic**: Works with any project type (JavaScript, Python, Go, etc.)
+- **Unified**: Single hook scripts with flag-based routing
 - **Intelligent**: Suggests specialized agents based on context
+- **Extensible**: Easy to add new TTS providers, LLM integrations, or hook types
+- **Reliable**: Timeout configurations and fallback mechanisms
 
 ## Credits & Inspirations
 
