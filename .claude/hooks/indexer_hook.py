@@ -241,26 +241,51 @@ def extract_user_prompts(project_root, input_data, max_prompts=5, max_prompt_len
         if transcript_path and Path(transcript_path).exists():
             with open(transcript_path, 'r') as f:
                 lines = f.readlines()
-                lines.reverse()
+                # Don't reverse - we want chronological order to get most recent
 
             for line in lines:
+                if not line.strip():
+                    continue
+                    
                 try:
                     entry = json.loads(line.strip())
-                    if entry.get('role') == 'user' or entry.get('type') == 'user':
-                        content = entry.get('content', '') or entry.get('text', '')
-                        if content:
-                            timestamp = entry.get('timestamp', '')
+                    
+                    # Check if this is a user message
+                    if entry.get('type') == 'user':
+                        message = entry.get('message', {})
+                        content_list = message.get('content', [])
+                        timestamp = entry.get('timestamp', '')
+                        
+                        # Extract text content from the content list
+                        text_content = None
+                        if isinstance(content_list, list):
+                            for item in content_list:
+                                if isinstance(item, dict) and item.get('type') == 'text':
+                                    text_content = item.get('text', '')
+                                    break
+                        elif isinstance(content_list, str):
+                            # Handle old format where content might be a string
+                            text_content = content_list
+                        
+                        # Skip tool results and empty content
+                        if text_content and 'tool_result' not in str(text_content):
+                            if len(text_content) > max_prompt_length:
+                                text_content = text_content[:max_prompt_length] + "..."
                             
-                            if len(content) > max_prompt_length:
-                                content = content[:max_prompt_length] + "..."
+                            user_prompts.append((text_content, timestamp))
                             
-                            user_prompts.append((content, timestamp))
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as e:
+                    # Log error but continue processing
+                    continue
+                except Exception as e:
+                    # Log error but continue processing
                     continue
     
-    except Exception:
+    except Exception as e:
+        # Log error but return what we have
         pass
     
+    # Return the LAST (most recent) N prompts
     return user_prompts[-max_prompts:] if user_prompts else []
 
 def generate_context_state(branch, status, recent_files, timestamp, user_prompts=None):
