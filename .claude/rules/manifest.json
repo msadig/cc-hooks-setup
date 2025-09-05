@@ -36,6 +36,20 @@
   "metadata": {
     "version": "1.2.1",
     "last_updated": "2025-01-03",
+    "plan_approval": {
+      "enabled": true,
+      "trigger_words": [
+        "plan approved",
+        "approve plan",
+        "go ahead",
+        "proceed with plan",
+        "execute plan",
+        "lgtm",
+        "looks good to me",
+        "start implementation",
+        "implement the plan"
+      ]
+    },
     "agent_integrations": {
       "testing-specialist": {
         "related_rules": ["testing-standards"]

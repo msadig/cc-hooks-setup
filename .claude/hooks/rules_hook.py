@@ -29,6 +29,39 @@ PRIORITY_ORDER = {
     'low': 1
 }
 
+def check_plan_approval(prompt: str, manifest: dict, session_id: str) -> bool:
+    """
+    Check if user prompt contains plan approval trigger words
+    and create plan_approved file if found
+    """
+    # Get plan approval config
+    plan_config = manifest.get('metadata', {}).get('plan_approval', {})
+    if not plan_config.get('enabled', False):
+        return False
+    
+    # Get trigger words with fallback to default
+    trigger_words = plan_config.get('trigger_words', ['plan approved'])
+    
+    # Check if any trigger word is in prompt
+    prompt_lower = prompt.lower()
+    for trigger in trigger_words:
+        if trigger.lower() in prompt_lower:
+            # Create plan_approved file
+            session_dir = os.path.join(PROJECT_DIR, '.claude/sessions', session_id)
+            os.makedirs(session_dir, exist_ok=True)
+            approved_flag = os.path.join(session_dir, 'plan_approved')
+            
+            # Create the file with timestamp
+            with open(approved_flag, 'w') as f:
+                f.write(f"Plan approved at: {datetime.datetime.now()}\n")
+                f.write(f"Trigger word: {trigger}\n")
+                f.write(f"User prompt: {prompt[:200]}...\n" if len(prompt) > 200 else f"User prompt: {prompt}\n")
+            
+            return True
+    
+    return False
+
+
 def add_always_load_context():
     """Load critical context files that should always be available."""
     # Primary context files (glob pattern matching)
@@ -120,26 +153,39 @@ def handle_prompt_validator(input_data):
     Handle UserPromptSubmit hook - loads and injects rules based on keyword matching
     and suggests agents based on related rules
     """
-    prompt = input_data.get('prompt', '').lower()
+    prompt = input_data.get('prompt', '')  # Keep original case for approval check
     session_id = input_data.get('session_id', 'default')
+    
+    # Load manifest first for approval check
+    manifest_path = os.path.join(PROJECT_DIR, '.claude/rules/manifest.json')
+    manifest = {}
+    if os.path.exists(manifest_path):
+        try:
+            with open(manifest_path, 'r') as f:
+                manifest = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            pass
+    
+    # Check for plan approval triggers FIRST
+    if check_plan_approval(prompt, manifest, session_id):
+        # Notify that plan was approved
+        print("✅ Plan approved! The plan_approved flag has been created.")
+        print("AI can now proceed with implementation.")
+        # Don't block - allow the approval message to go through
+        return 0
+    
+    # Convert prompt to lowercase for rule matching
+    prompt_lower = prompt.lower()
     
     # First, always load context files (works even without manifest)
     always_load_context = add_always_load_context()
     
-    # Check if manifest exists
-    manifest_path = os.path.join(PROJECT_DIR, '.claude/rules/manifest.json')
-    if not os.path.exists(manifest_path):
+    # Check if manifest exists for rule processing
+    if not manifest:
         # No manifest, but we can still provide always-load context
         if always_load_context:
             print(always_load_context)
         return 0
-    
-    # Load manifest
-    try:
-        with open(manifest_path, 'r') as f:
-            manifest = json.load(f)
-    except (json.JSONDecodeError, IOError):
-        return 0  # Invalid manifest, exit silently
     
     # Build list of rules with their info
     matched_rules = []
@@ -161,7 +207,7 @@ def handle_prompt_validator(input_data):
         
         # Check if any trigger keyword is in prompt
         for trigger in rule_data.get('triggers', []):
-            if trigger.lower() in prompt:
+            if trigger.lower() in prompt_lower:
                 matched_rules.append({
                     'name': rule_name,
                     'data': rule_data,
@@ -299,8 +345,13 @@ def handle_plan_enforcer(input_data):
     # Get the file being written/edited
     filepath = tool_input.get('file_path', '')
     
-    # Allow writing to plan-related files without checks
-    if any(x in filepath for x in [plan_file_name, approved_flag_file_name]):
+    # Block AI from creating/editing plan_approved file
+    if approved_flag_file_name in filepath:
+        print(f"Direct creation of '{approved_flag_file_name}' is not allowed. User must approve the plan using trigger words.", file=sys.stderr)
+        return 2  # Block operation
+    
+    # Allow writing to plan file only
+    if plan_file_name in filepath:
         return 0  # Allow operation without enforcement
     
     # For other files, check if plan exists and is approved
@@ -309,7 +360,18 @@ def handle_plan_enforcer(input_data):
         return 2  # Block operation
     
     if not os.path.exists(approved_flag):
-        print(f"Plan not approved. Please get approval first by creating {approved_flag}", file=sys.stderr)
+        # Check if trigger words are configured
+        manifest_path = os.path.join(PROJECT_DIR, '.claude/rules/manifest.json')
+        trigger_hint = ""
+        try:
+            with open(manifest_path, 'r') as f:
+                manifest = json.load(f)
+                triggers = manifest.get('metadata', {}).get('plan_approval', {}).get('trigger_words', ['plan approved'])
+                trigger_hint = f"\n\nTo approve, use one of these phrases: {', '.join(triggers[:3])}"
+        except:
+            trigger_hint = "\n\nTo approve, say: 'plan approved'"
+        
+        print(f"Plan not approved. User must approve the plan first.{trigger_hint}", file=sys.stderr)
         return 2  # Block operation
     
     # Track the file being modified

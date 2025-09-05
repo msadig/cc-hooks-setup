@@ -3,5 +3,71 @@
     "type": "command",
     "command": "./.claude/statusline.sh",
     "padding": 0
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run /Users/sadigmuradov/Sadig/Development/playground/cc-hook-rules/.claude/hooks/rules_hook.py --prompt-validator",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run /Users/sadigmuradov/Sadig/Development/playground/cc-hook-rules/.claude/hooks/rules_hook.py --immutable-check",
+            "timeout": 5
+          }
+        ],
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run /Users/sadigmuradov/Sadig/Development/playground/cc-hook-rules/.claude/hooks/rules_hook.py --plan-enforcer",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run /Users/sadigmuradov/Sadig/Development/playground/cc-hook-rules/.claude/hooks/rules_hook.py --file-matcher",
+            "timeout": 5
+          }
+        ],
+        "matcher": "Read|Write|Edit|MultiEdit|NotebookEdit"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run /Users/sadigmuradov/Sadig/Development/playground/cc-hook-rules/.claude/hooks/rules_hook.py --commit-helper",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run /Users/sadigmuradov/Sadig/Development/playground/cc-hook-rules/.claude/hooks/rules_hook.py --session-start",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
   }
 }
