@@ -10,7 +10,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run /Users/sadigmuradov/Sadig/Development/playground/cc-hook-rules/.claude/hooks/rules_hook.py --prompt-validator",
+            "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --prompt-validator",
             "timeout": 10
           }
         ]
@@ -21,7 +21,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run /Users/sadigmuradov/Sadig/Development/playground/cc-hook-rules/.claude/hooks/rules_hook.py --immutable-check",
+            "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --immutable-check",
             "timeout": 5
           }
         ],
@@ -31,7 +31,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run /Users/sadigmuradov/Sadig/Development/playground/cc-hook-rules/.claude/hooks/rules_hook.py --plan-enforcer",
+            "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --plan-enforcer",
             "timeout": 5
           }
         ]
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run /Users/sadigmuradov/Sadig/Development/playground/cc-hook-rules/.claude/hooks/rules_hook.py --file-matcher",
+            "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --file-matcher",
             "timeout": 5
           }
         ],
@@ -52,7 +52,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run /Users/sadigmuradov/Sadig/Development/playground/cc-hook-rules/.claude/hooks/rules_hook.py --commit-helper",
+            "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --commit-helper",
             "timeout": 10
           }
         ]
@@ -63,7 +63,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run /Users/sadigmuradov/Sadig/Development/playground/cc-hook-rules/.claude/hooks/rules_hook.py --session-start",
+            "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --session-start",
             "timeout": 10
           }
         ]

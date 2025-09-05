@@ -20,6 +20,7 @@ from collections import defaultdict
 
 # Get project root
 PROJECT_DIR = os.environ.get('CLAUDE_PROJECT_DIR', '.')
+MANIFEST_PATH = os.path.join(PROJECT_DIR, '.claude/rules/manifest.json')
 
 # Priority order for rule loading
 PRIORITY_ORDER = {
@@ -157,11 +158,10 @@ def handle_prompt_validator(input_data):
     session_id = input_data.get('session_id', 'default')
     
     # Load manifest first for approval check
-    manifest_path = os.path.join(PROJECT_DIR, '.claude/rules/manifest.json')
     manifest = {}
-    if os.path.exists(manifest_path):
+    if os.path.exists(MANIFEST_PATH):
         try:
-            with open(manifest_path, 'r') as f:
+            with open(MANIFEST_PATH, 'r') as f:
                 manifest = json.load(f)
         except (json.JSONDecodeError, IOError):
             pass
@@ -363,10 +363,9 @@ def handle_plan_enforcer(input_data):
             tool_name == 'Bash' and 'plan_approved' in tool_input.get('command', '').lower()
         ]):
         # Check if trigger words are configured
-        manifest_path = os.path.join(PROJECT_DIR, '.claude/rules/manifest.json')
         trigger_hint = ""
         try:
-            with open(manifest_path, 'r') as f:
+            with open(MANIFEST_PATH, 'r') as f:
                 manifest = json.load(f)
                 triggers = manifest.get('metadata', {}).get('plan_approval', {}).get('trigger_words', ['plan approved'])
                 trigger_hint = f"\n\nTo approve, use one of these phrases: {', '.join(triggers[:3])}"
@@ -522,13 +521,12 @@ def handle_immutable_files_check(input_data):
             pass
     
     # Check if manifest exists
-    manifest_path = os.path.join(PROJECT_DIR, '.claude/rules/manifest.json')
-    if not os.path.exists(manifest_path):
+    if not os.path.exists(MANIFEST_PATH):
         return 0
     
     # Load manifest
     try:
-        with open(manifest_path, 'r') as f:
+        with open(MANIFEST_PATH, 'r') as f:
             manifest = json.load(f)
     except (json.JSONDecodeError, IOError):
         return 0
@@ -606,13 +604,12 @@ def handle_pretool_file_matcher(input_data):
             pass
     
     # Check if manifest exists
-    manifest_path = os.path.join(PROJECT_DIR, '.claude/rules/manifest.json')
-    if not os.path.exists(manifest_path):
+    if not os.path.exists(MANIFEST_PATH):
         return 0
     
     # Load manifest
     try:
-        with open(manifest_path, 'r') as f:
+        with open(MANIFEST_PATH, 'r') as f:
             manifest = json.load(f)
     except (json.JSONDecodeError, IOError):
         return 0
