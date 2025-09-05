@@ -24,6 +24,8 @@ Hook Types:
     subagent_stop - Subagent completion handling
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import os
@@ -34,6 +36,7 @@ import shutil
 import random
 from pathlib import Path
 from datetime import datetime
+from typing import Any, Optional
 
 try:
     from dotenv import load_dotenv
@@ -57,21 +60,20 @@ NC = "\033[0m"  # No Color
 # Common Functions
 # ============================================================================
 
-def log_to_json(log_name, data):
+def log_to_json(log_name: str, data: dict[str, Any]) -> None:
     """Common logging function for all hooks."""
     log_dir = CLAUDE_PROJECT_DIR / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f'{log_name}.json'
     
     # Read existing log data or initialize empty list
+    log_data: list[dict[str, Any]] = []
     if log_file.exists():
-        with open(log_file, 'r') as f:
-            try:
+        try:
+            with open(log_file, 'r') as f:
                 log_data = json.load(f)
-            except (json.JSONDecodeError, ValueError):
-                log_data = []
-    else:
-        log_data = []
+        except (json.JSONDecodeError, ValueError):
+            pass
     
     # Append the new data
     log_data.append(data)
@@ -81,7 +83,7 @@ def log_to_json(log_name, data):
         json.dump(log_data, f, indent=2)
 
 
-def get_tts_script_path():
+def get_tts_script_path() -> Optional[str]:
     """
     Determine which TTS script to use based on available API keys.
     Priority order: ElevenLabs > OpenAI > pyttsx3
@@ -91,44 +93,36 @@ def get_tts_script_path():
     tts_dir = script_dir / "utils" / "tts"
     
     # Check for ElevenLabs API key (highest priority)
-    if os.getenv('ELEVENLABS_API_KEY'):
-        elevenlabs_script = tts_dir / "elevenlabs_tts.py"
-        if elevenlabs_script.exists():
-            return str(elevenlabs_script)
+    if os.getenv('ELEVENLABS_API_KEY') and (script := tts_dir / "elevenlabs_tts.py").exists():
+        return str(script)
     
     # Check for OpenAI API key (second priority)
-    if os.getenv('OPENAI_API_KEY'):
-        openai_script = tts_dir / "openai_tts.py"
-        if openai_script.exists():
-            return str(openai_script)
+    if os.getenv('OPENAI_API_KEY') and (script := tts_dir / "openai_tts.py").exists():
+        return str(script)
     
     # Fall back to pyttsx3 (no API key required)
-    pyttsx3_script = tts_dir / "pyttsx3_tts.py"
-    if pyttsx3_script.exists():
-        return str(pyttsx3_script)
+    if (script := tts_dir / "pyttsx3_tts.py").exists():
+        return str(script)
     
     return None
 
 
-def get_llm_script_path(purpose="completion"):
+def get_llm_script_path(purpose: str = "completion") -> Optional[str]:
     """
     Determine which LLM script to use based on available API keys.
     Priority order: OpenAI > Anthropic
     """
+    _ = purpose  # May be used in future for different LLM purposes
     script_dir = Path(__file__).parent
     llm_dir = script_dir / "utils" / "llm"
     
     # Try OpenAI first (highest priority)
-    if os.getenv('OPENAI_API_KEY'):
-        oai_script = llm_dir / "oai.py"
-        if oai_script.exists():
-            return str(oai_script)
+    if os.getenv('OPENAI_API_KEY') and (script := llm_dir / "oai.py").exists():
+        return str(script)
     
     # Try Anthropic second
-    if os.getenv('ANTHROPIC_API_KEY'):
-        anth_script = llm_dir / "anth.py"
-        if anth_script.exists():
-            return str(anth_script)
+    if os.getenv('ANTHROPIC_API_KEY') and (script := llm_dir / "anth.py").exists():
+        return str(script)
     
     return None
 
@@ -137,13 +131,13 @@ def get_llm_script_path(purpose="completion"):
 # User Prompt Submit Hook
 # ============================================================================
 
-def validate_prompt(prompt):
+def validate_prompt(prompt: str) -> tuple[bool, Optional[str]]:
     """
     Validate the user prompt for security or policy violations.
     Returns tuple (is_valid, reason).
     """
     # Example validation rules (customize as needed)
-    blocked_patterns = [
+    blocked_patterns: list[tuple[str, str]] = [
         # Add any patterns you want to block
         # Example: ('rm -rf /', 'Dangerous command detected'),
     ]
@@ -160,10 +154,10 @@ def validate_prompt(prompt):
 # Context loading functionality has been migrated to rules_hook.py
 
 
-def handle_user_prompt_submit(args, input_data):
+def handle_user_prompt_submit(args: argparse.Namespace, input_data: dict[str, Any]) -> None:
     """Handle user_prompt_submit hook."""
     # Extract session_id and prompt
-    session_id = input_data.get('session_id', 'unknown')
+    _ = input_data.get('session_id', 'unknown')  # Available for future use
     prompt = input_data.get('prompt', '')
     
     # Log the user prompt
@@ -174,10 +168,9 @@ def handle_user_prompt_submit(args, input_data):
 
     # Validate prompt if requested and not in log-only mode
     if args.validate and not args.log_only:
-        is_valid, reason = validate_prompt(prompt)
-        if not is_valid:
+        if not (is_valid_and_reason := validate_prompt(prompt))[0]:
             # Exit code 2 blocks the prompt with error message
-            print(f"Prompt blocked: {reason}", file=sys.stderr)
+            print(f"Prompt blocked: {is_valid_and_reason[1]}", file=sys.stderr)
             sys.exit(2)
     
     # Success - prompt will be processed
@@ -188,13 +181,13 @@ def handle_user_prompt_submit(args, input_data):
 # Session Start Hook
 # ============================================================================
 
-def get_git_status():
+def get_git_status() -> Optional[dict[str, Any]]:
     """Get comprehensive git status information."""
     # if project has git repository
     if not (CLAUDE_PROJECT_DIR / ".git").exists():
         return None
     try:
-        git_info = {}
+        git_info: dict[str, Any] = {}
         
         # Get current branch
         branch_result = subprocess.run(
@@ -216,20 +209,17 @@ def get_git_status():
             git_info['upstream'] = upstream_result.stdout.strip()
             
             # Check if we're ahead/behind
-            ahead_result = subprocess.run(
+            if (ahead_result := subprocess.run(
                 ['git', 'rev-list', '--count', '@{u}..HEAD'],
                 capture_output=True,
                 text=True,
                 timeout=5
-            )
-            behind_result = subprocess.run(
+            )).returncode == 0 and (behind_result := subprocess.run(
                 ['git', 'rev-list', '--count', 'HEAD..@{u}'],
                 capture_output=True,
                 text=True,
                 timeout=5
-            )
-            
-            if ahead_result.returncode == 0 and behind_result.returncode == 0:
+            )).returncode == 0:
                 git_info['ahead'] = int(ahead_result.stdout.strip())
                 git_info['behind'] = int(behind_result.stdout.strip())
         else:
@@ -238,13 +228,12 @@ def get_git_status():
             git_info['behind'] = 0
         
         # Get detailed status
-        status_result = subprocess.run(
+        if (status_result := subprocess.run(
             ['git', 'status', '--porcelain'],
             capture_output=True,
             text=True,
             timeout=5
-        )
-        if status_result.returncode == 0:
+        )).returncode == 0:
             status_lines = status_result.stdout.strip().split('\n') if status_result.stdout.strip() else []
             
             # Count different types of changes
@@ -263,13 +252,12 @@ def get_git_status():
             git_info['total_changes'] = 0
         
         # Get last commit
-        commit_result = subprocess.run(
+        if (commit_result := subprocess.run(
             ['git', 'log', '-1', '--pretty=format:%h %s'],
             capture_output=True,
             text=True,
             timeout=5
-        )
-        if commit_result.returncode == 0:
+        )).returncode == 0:
             git_info['last_commit'] = commit_result.stdout.strip()
         else:
             git_info['last_commit'] = None
@@ -279,31 +267,29 @@ def get_git_status():
         return None
 
 
-def get_recent_issues():
+def get_recent_issues() -> Optional[str]:
     """Get recent GitHub issues if gh CLI is available."""
     try:
         # Check if gh is available
-        gh_check = subprocess.run(['which', 'gh'], capture_output=True)
-        if gh_check.returncode != 0:
+        if subprocess.run(['which', 'gh'], capture_output=True).returncode != 0:
             return None
         
         # Get recent open issues
-        result = subprocess.run(
+        if (result := subprocess.run(
             ['gh', 'issue', 'list', '--limit', '5', '--state', 'open'],
             capture_output=True,
             text=True,
             timeout=10
-        )
-        if result.returncode == 0 and result.stdout.strip():
+        )).returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
     except Exception:
         pass
     return None
 
 
-def load_development_context(source):
+def load_development_context(source: str) -> str:
     """Load relevant development context based on session source."""
-    context_parts = []
+    context_parts: list[str] = []
     
     # Add timestamp
     context_parts.append(f"{CYAN}🏁 Session started at: {GREEN}{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}{NC}")
@@ -354,15 +340,14 @@ def load_development_context(source):
             context_parts.append(f"{BLUE}   Last commit: {NC}{git_info['last_commit']}")
     
     # Add recent issues if available
-    issues = get_recent_issues()
-    if issues:
+    if issues := get_recent_issues():
         context_parts.append(f"{CYAN}\n--- Recent GitHub Issues ---{NC}")
         context_parts.append(issues)
     
     return "\n".join(context_parts)
 
 
-def handle_session_start(args, input_data):
+def handle_session_start(args: argparse.Namespace, input_data: dict[str, Any]) -> None:
     """Handle session_start hook."""
     # Extract fields
     source = input_data.get('source', 'unknown')  # "startup", "resume", or "clear"
@@ -392,18 +377,16 @@ def handle_session_start(args, input_data):
             pass
 
     # Load development context if requested
-    if args.load_context:
-        context = load_development_context(source)
-        if context:
-            # Using JSON output to add context
-            output = {
-                "hookSpecificOutput": {
-                    "hookEventName": "SessionStart",
-                    "additionalContext": context
-                }
+    if args.load_context and (context := load_development_context(source)):
+        # Using JSON output to add context
+        output = {
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": context
             }
-            print(json.dumps(output))
-            sys.exit(0)
+        }
+        print(json.dumps(output))
+        sys.exit(0)
     
     # Success
     sys.exit(0)
@@ -413,7 +396,7 @@ def handle_session_start(args, input_data):
 # Pre Tool Use Hook
 # ============================================================================
 
-def is_dangerous_rm_command(command):
+def is_dangerous_rm_command(command: str) -> bool:
     """
     Comprehensive detection of dangerous rm commands.
     Matches various forms of rm -rf and similar destructive patterns.
@@ -450,14 +433,12 @@ def is_dangerous_rm_command(command):
     ]
     
     if re.search(r'\brm\s+.*-[a-z]*r', normalized):  # If rm has recursive flag
-        for path in dangerous_paths:
-            if re.search(path, normalized):
-                return True
+        return any(re.search(path, normalized) for path in dangerous_paths)
     
     return False
 
 
-def is_env_file_access(tool_name, tool_input):
+def is_env_file_access(tool_name: str, tool_input: dict[str, Any]) -> bool:
     """
     Check if any tool is trying to access .env files containing sensitive data.
     """
@@ -481,14 +462,12 @@ def is_env_file_access(tool_name, tool_input):
                 r'mv\s+.*\.env\b(?!\.sample)',  # mv .env
             ]
             
-            for pattern in env_patterns:
-                if re.search(pattern, command):
-                    return True
+            return any(re.search(pattern, command) for pattern in env_patterns)
     
     return False
 
 
-def handle_pre_tool_use(args, input_data):
+def handle_pre_tool_use(args: argparse.Namespace, input_data: dict[str, Any]) -> None:
     """Handle pre_tool_use hook."""
     # Extract tool information
     tool_name = input_data.get('tool_name', '')
@@ -509,7 +488,7 @@ def handle_pre_tool_use(args, input_data):
         sys.exit(2)
     
     # Log the tool use (optional)
-    if args.log:
+    if hasattr(args, 'log') and args.log:
         log_to_json('pre_tool_use', input_data)
     
     # Tool use is allowed
@@ -520,7 +499,7 @@ def handle_pre_tool_use(args, input_data):
 # Post Tool Use Hook
 # ============================================================================
 
-def handle_post_tool_use(args, input_data):
+def handle_post_tool_use(args: argparse.Namespace, input_data: dict[str, Any]) -> None:
     """Handle post_tool_use hook."""
     # Log the tool use result
     log_to_json('post_tool_use', input_data)
@@ -533,7 +512,7 @@ def handle_post_tool_use(args, input_data):
 # Pre Compact Hook
 # ============================================================================
 
-def backup_transcript(transcript_path, trigger):
+def backup_transcript(transcript_path: str, trigger: str) -> Optional[str]:
     """
     Create a backup of the transcript file before compaction.
     """
@@ -556,7 +535,7 @@ def backup_transcript(transcript_path, trigger):
     return None
 
 
-def handle_pre_compact(args, input_data):
+def handle_pre_compact(args: argparse.Namespace, input_data: dict[str, Any]) -> None:
     """Handle pre_compact hook."""
     # Extract fields
     trigger = input_data.get('trigger', 'unknown')  # "limit" or "command"
@@ -566,10 +545,8 @@ def handle_pre_compact(args, input_data):
     log_to_json('pre_compact', input_data)
     
     # Backup transcript if requested
-    if args.backup and transcript_path:
-        backup_path = backup_transcript(transcript_path, trigger)
-        if backup_path and args.verbose:
-            print(f"Transcript backed up to: {backup_path}")
+    if args.backup and transcript_path and (backup_path := backup_transcript(transcript_path, trigger)) and args.verbose:
+        print(f"Transcript backed up to: {backup_path}")
     
     # Success
     sys.exit(0)
@@ -579,7 +556,7 @@ def handle_pre_compact(args, input_data):
 # Stop Hook
 # ============================================================================
 
-def get_completion_messages():
+def get_completion_messages() -> list[str]:
     """Return list of friendly completion messages."""
     return [
         "Work complete!",
@@ -590,14 +567,13 @@ def get_completion_messages():
     ]
 
 
-def get_llm_completion_message():
+def get_llm_completion_message() -> str:
     """
     Generate completion message using available LLM services.
     Priority order: OpenAI > Anthropic > fallback to random message
     """
-    llm_script = get_llm_script_path()
+    if llm_script := get_llm_script_path():
     
-    if llm_script:
         try:
             result = subprocess.run(
                 ["uv", "run", llm_script, "--completion"],
@@ -605,8 +581,8 @@ def get_llm_completion_message():
                 text=True,
                 timeout=10
             )
-            if result.returncode == 0 and result.stdout.strip():
-                return result.stdout.strip()
+            if result.returncode == 0 and (output := result.stdout.strip()):
+                return output
         except (subprocess.TimeoutExpired, subprocess.SubprocessError):
             pass
     
@@ -614,11 +590,9 @@ def get_llm_completion_message():
     return random.choice(get_completion_messages())
 
 
-def announce_completion():
+def announce_completion() -> None:
     """Announce completion via TTS."""
-    tts_script = get_tts_script_path()
-    
-    if not tts_script:
+    if not (tts_script := get_tts_script_path()):
         return
     
     try:
@@ -635,7 +609,7 @@ def announce_completion():
         pass
 
 
-def handle_stop(args, input_data):
+def handle_stop(args: argparse.Namespace, input_data: dict[str, Any]) -> None:
     """Handle stop hook."""
     # Log the stop event
     log_to_json('stop', input_data)
@@ -652,11 +626,9 @@ def handle_stop(args, input_data):
 # Notification Hook
 # ============================================================================
 
-def announce_notification(text):
+def announce_notification(text: str) -> None:
     """Announce notification via TTS."""
-    tts_script = get_tts_script_path()
-    
-    if not tts_script:
+    if not (tts_script := get_tts_script_path()):
         return
     
     try:
@@ -669,7 +641,7 @@ def announce_notification(text):
         pass
 
 
-def handle_notification(args, input_data):
+def handle_notification(args: argparse.Namespace, input_data: dict[str, Any]) -> None:
     """Handle notification hook."""
     # Extract notification text
     text = input_data.get('text', '')
@@ -689,11 +661,9 @@ def handle_notification(args, input_data):
 # Subagent Stop Hook
 # ============================================================================
 
-def announce_subagent_completion():
+def announce_subagent_completion() -> None:
     """Announce subagent completion via TTS."""
-    tts_script = get_tts_script_path()
-    
-    if not tts_script:
+    if not (tts_script := get_tts_script_path()):
         return
     
     try:
@@ -714,7 +684,7 @@ def announce_subagent_completion():
         pass
 
 
-def handle_subagent_stop(args, input_data):
+def handle_subagent_stop(args: argparse.Namespace, input_data: dict[str, Any]) -> None:
     """Handle subagent_stop hook."""
     # Log the subagent stop event
     log_to_json('subagent_stop', input_data)
@@ -731,7 +701,7 @@ def handle_subagent_stop(args, input_data):
 # Main Entry Point
 # ============================================================================
 
-def main():
+def main() -> None:
     """Main entry point for unified hook script."""
     # Create main parser
     parser = argparse.ArgumentParser(description='Unified Hook Helper for Claude Code')
