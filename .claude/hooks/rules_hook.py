@@ -345,11 +345,6 @@ def handle_plan_enforcer(input_data):
     # Get the file being written/edited
     filepath = tool_input.get('file_path', '')
     
-    # Block AI from creating/editing plan_approved file
-    if approved_flag_file_name in filepath:
-        print(f"Direct creation of '{approved_flag_file_name}' is not allowed. User must approve the plan using trigger words.", file=sys.stderr)
-        return 2  # Block operation
-    
     # Allow writing to plan file only
     if plan_file_name in filepath:
         return 0  # Allow operation without enforcement
@@ -359,7 +354,14 @@ def handle_plan_enforcer(input_data):
         print(f"No plan found. Please create a plan first by writing to {plan_path}", file=sys.stderr)
         return 2  # Block operation
     
-    if not os.path.exists(approved_flag):
+    if any([
+            # Plan not approved
+            not os.path.exists(approved_flag),
+            # Block AI from creating/editing plan_approved file
+            approved_flag_file_name in filepath,
+            # Special case: if the tool is Bash and command includes 'plan_approved', block it
+            tool_name == 'Bash' and 'plan_approved' in tool_input.get('command', '').lower()
+        ]):
         # Check if trigger words are configured
         manifest_path = os.path.join(PROJECT_DIR, '.claude/rules/manifest.json')
         trigger_hint = ""
