@@ -140,17 +140,53 @@ fi
 get_session_window_reset() {
     local transcript_path="$1"
     
-    if [[ -z "$transcript_path" || ! -f "$transcript_path" ]]; then
-        echo "unknown|--:--"
-        return
+    # Debug: Log the transcript path to stderr for troubleshooting
+    # echo "DEBUG: Transcript path: '$transcript_path', Session ID: '$SESSION_ID'" >&2
+    
+    # Check if transcript path is empty, null, or file doesn't exist
+    if [[ -z "$transcript_path" || "$transcript_path" == "null" || ! -f "$transcript_path" ]]; then
+        # If no transcript, try to find it based on session_id
+        if [[ -n "$SESSION_ID" ]]; then
+            # Try common Claude transcript locations (quick check, no deep find)
+            for dir in ~/.claude-code* ~/Library/Application\ Support/Claude* ~/.config/claude*; do
+                if [[ -d "$dir" ]]; then
+                    local found_transcript="${dir}/${SESSION_ID}.jsonl"
+                    if [[ -f "$found_transcript" ]]; then
+                        transcript_path="$found_transcript"
+                        break
+                    fi
+                fi
+            done
+        fi
+        
+        # If still no transcript found, use fallback session tracking
+        if [[ -z "$transcript_path" || ! -f "$transcript_path" ]]; then
+            # Skip trying to read from non-existent transcript
+            transcript_path=""
+        fi
     fi
     
-    # Get first message timestamp (session start)
-    local session_start=$(jq -r '.timestamp // empty' "$transcript_path" 2>/dev/null | head -n 1)
+    # Get first message timestamp (session start) only if we have a transcript
+    local session_start=""
+    if [[ -n "$transcript_path" ]]; then
+        session_start=$(jq -r '.timestamp // empty' "$transcript_path" 2>/dev/null | head -n 1)
+    fi
     
     if [[ -z "$session_start" || "$session_start" == "null" ]]; then
-        echo "unknown|--:--"
-        return
+        # Fallback: Use a session start file to track when session began
+        local session_file="/tmp/.claude_session_${SESSION_ID:-default}"
+        
+        if [[ ! -f "$session_file" ]]; then
+            # Create session file with current time as start
+            date -u +"%Y-%m-%dT%H:%M:%S.000Z" > "$session_file"
+        fi
+        
+        session_start=$(cat "$session_file" 2>/dev/null)
+        
+        if [[ -z "$session_start" ]]; then
+            echo "unknown|--:--"
+            return
+        fi
     fi
     
     # Convert to epoch and add 5 hours
