@@ -136,27 +136,80 @@ else
     CONTEXT_STATUS="healthy"
 fi
 
-# Global rate limit reset calculation (most APIs reset hourly)
-CURRENT_EPOCH=$(date +%s)
-CURRENT_HOUR=$(date +%H)
-CURRENT_MINUTE=$(date +%M)
+# 5-hour session window calculation
+get_session_window_reset() {
+    local transcript_path="$1"
+    
+    if [[ -z "$transcript_path" || ! -f "$transcript_path" ]]; then
+        echo "unknown|--:--"
+        return
+    fi
+    
+    # Get first message timestamp (session start)
+    local session_start=$(jq -r '.timestamp // empty' "$transcript_path" 2>/dev/null | head -n 1)
+    
+    if [[ -z "$session_start" || "$session_start" == "null" ]]; then
+        echo "unknown|--:--"
+        return
+    fi
+    
+    # Convert to epoch and add 5 hours
+    # Handle both macOS (date -j) and Linux (date -d) formats
+    local start_epoch
+    if date -d "$session_start" +%s >/dev/null 2>&1; then
+        # Linux/GNU date
+        start_epoch=$(date -d "$session_start" +%s)
+    else
+        # macOS date - extract just the date/time part and handle as UTC
+        local clean_date="${session_start%%.*}"
+        clean_date="${clean_date%%Z}"
+        clean_date="${clean_date%%+*}"
+        # Use -u flag to interpret as UTC
+        start_epoch=$(date -u -j -f "%Y-%m-%dT%H:%M:%S" "$clean_date" +%s 2>/dev/null)
+    fi
+    
+    if [[ -z "$start_epoch" ]]; then
+        echo "unknown|--:--"
+        return
+    fi
+    
+    local expiry_epoch=$((start_epoch + 18000))  # 5 hours = 18000 seconds
+    local current_epoch=$(date +%s)
+    
+    # Calculate time remaining
+    local seconds_remaining=$((expiry_epoch - current_epoch))
+    
+    if [ $seconds_remaining -le 0 ]; then
+        echo "expired|now"
+    else
+        local hours=$((seconds_remaining / 3600))
+        local minutes=$(((seconds_remaining % 3600) / 60))
+        local time_display=""
+        
+        if [ $hours -gt 0 ]; then
+            time_display="${hours}h ${minutes}m"
+        else
+            time_display="${minutes}m"
+        fi
+        
+        # Format reset time for display
+        local reset_time
+        if date -r $expiry_epoch +"%H:%M" >/dev/null 2>&1; then
+            # macOS
+            reset_time=$(date -r $expiry_epoch +"%H:%M")
+        else
+            # Linux
+            reset_time=$(date -d "@$expiry_epoch" +"%H:%M")
+        fi
+        
+        echo "$time_display|$reset_time"
+    fi
+}
 
-# Calculate next hour reset
-NEXT_HOUR=$(( (CURRENT_HOUR + 1) % 24 ))
-MINUTES_TO_RESET=$(( 60 - CURRENT_MINUTE ))
-
-# Format global reset time
-if [ $MINUTES_TO_RESET -eq 60 ] || [ $MINUTES_TO_RESET -eq 0 ]; then
-    GLOBAL_RESET="now"
-elif [ $MINUTES_TO_RESET -gt 0 ] && [ $MINUTES_TO_RESET -lt 60 ]; then
-    GLOBAL_RESET="${MINUTES_TO_RESET}m"
-else
-    GLOBAL_RESET="1m"  # Fallback for edge cases
-fi
-
-# Calculate next reset time
-RESET_EPOCH=$(( CURRENT_EPOCH + (MINUTES_TO_RESET * 60) ))
-GLOBAL_RESET_TIME=$(date -r $RESET_EPOCH +"%H:%M" 2>/dev/null || date -d "@$RESET_EPOCH" +"%H:%M" 2>/dev/null || echo "??:??")
+# Get session window reset info
+SESSION_RESET_INFO=$(get_session_window_reset "$TRANSCRIPT_PATH")
+SESSION_RESET_TIME="${SESSION_RESET_INFO%|*}"
+SESSION_RESET_AT="${SESSION_RESET_INFO#*|}"
 
 # Calculate cost per hour if duration is significant
 COST_PER_HOUR=""
@@ -204,5 +257,5 @@ PROGRESS_BAR=$(create_progress_bar "$CONTEXT_USED_PCT")
 # Build two-line status display
 # Line 1: Keep original format with project/directory info
 echo "[$MODEL_DISPLAY] 🎯 ${PROJECT_DIR##*/}: 📁 ${CURRENT_DIR##*/}${GIT_BRANCH}"
-# Line 2: Session context + Global limits + Cost info
-echo -e "🧠 ${CONTEXT_COLOR}${PROGRESS_BAR} ${CONTEXT_USED_PCT}% of ${CONTEXT_DISPLAY}k (${CONTEXT_STATUS})${RESET_COLOR} ${TIME_COLOR}⏳ Limits reset in ${GLOBAL_RESET} @ ${GLOBAL_RESET_TIME}${RESET_COLOR} ${COST_COLOR}💰\$${COST_DISPLAY}${COST_PER_HOUR}${RESET_COLOR} ${METRIC_COLOR}📊 ${SESSION_TOKENS} tok${TPM}${RESET_COLOR}"
+# Line 2: Session context + Session window expiry + Cost info
+echo -e "🧠 ${CONTEXT_COLOR}${PROGRESS_BAR} ${CONTEXT_USED_PCT}% of ${CONTEXT_DISPLAY}k (${CONTEXT_STATUS})${RESET_COLOR} ${TIME_COLOR}⏳ Session expires in ${SESSION_RESET_TIME} @ ${SESSION_RESET_AT}${RESET_COLOR} ${COST_COLOR}💰\$${COST_DISPLAY}${COST_PER_HOUR}${RESET_COLOR} ${METRIC_COLOR}📊 ${SESSION_TOKENS} tok${TPM}${RESET_COLOR}"
