@@ -494,13 +494,12 @@ def inject_variables(template_content: str, variables: Dict[str, str]) -> str:
     return template.safe_substitute(variables)
 
 
-def load_context_for_hook(hook_type: str, project_dir: str, session_id: str, 
-                          changed_files: Optional[List[str]] = None) -> Optional[str]:
+def load_stop_reminder_context(project_dir: str, session_id: str, 
+                               changed_files: Optional[List[str]] = None) -> Optional[str]:
     """
-    Load and process markdown templates for a specific hook type.
+    Load and process STOPREMINDER markdown templates.
     
     Args:
-        hook_type: Type of hook ('stop', 'commit', 'test', etc.)
         project_dir: Project root directory
         session_id: Current session ID
         changed_files: List of changed files (optional)
@@ -508,17 +507,8 @@ def load_context_for_hook(hook_type: str, project_dir: str, session_id: str,
     Returns:
         Processed context string or None if no templates found
     """
-    # Define patterns for different hook types
-    patterns = {
-        'stop': ['**/*STOPREMINDER*.md', '**/*STOP_REMINDER*.md'],
-        'commit': ['**/*COMMITHELPER*.md', '**/*COMMIT_HELPER*.md'],
-        'test': ['**/*TESTREMINDER*.md', '**/*TEST_REMINDER*.md'],
-    }
-    
-    # Get patterns for this hook type
-    hook_patterns = patterns.get(hook_type, [])
-    if not hook_patterns:
-        return None
+    # Patterns for STOPREMINDER files
+    patterns = ['**/*STOPREMINDER*.md', '**/*STOP_REMINDER*.md']
     
     # Prepare variables for injection
     variables = {
@@ -543,7 +533,7 @@ def load_context_for_hook(hook_type: str, project_dir: str, session_id: str,
     # Find and process all matching templates
     all_contexts = []
     
-    for pattern in hook_patterns:
+    for pattern in patterns:
         matching_files = find_matching_files(pattern, project_dir)
         
         for file_path in matching_files:
@@ -626,31 +616,21 @@ def handle_commit_helper(input_data):
                     if gitignore_result.returncode != 0:  # Not ignored
                         uncommitted_files.append(filepath)
         
-        # Load any markdown templates for context injection
-        template_context = load_context_for_hook(
-            hook_type='stop',
+        # Load any STOPREMINDER markdown templates for context injection
+        template_context = load_stop_reminder_context(
             project_dir=PROJECT_DIR,
             session_id=session_id,
             changed_files=uncommitted_files if uncommitted_files else changed_files
         )
         
-        if uncommitted_files:
-            # Build output with optional context
+        # If there's template context (which includes uncommitted files info), provide it
+        if template_context:
             output = {
-                "decision": "block",
-                "reason": (
-                    f"Session complete. Please run appropriate tests for these modified files and commit the changes: {', '.join(uncommitted_files)}"
-                    "\n If you already committed these changes, please empty the changed files list."
-                )
-            }
-            
-            # Add template context if found
-            if template_context:
-                output["hookSpecificOutput"] = {
+                "hookSpecificOutput": {
                     "hookEventName": "Stop",
                     "additionalContext": template_context
                 }
-            
+            }
             print(json.dumps(output))
         else:
             # All files are committed or ignored, clear the changed files list
@@ -659,7 +639,7 @@ def handle_commit_helper(input_data):
             except OSError:
                 pass
             
-            # If there's template context even when all is committed, provide it
+            # If there's template context, provide it
             if template_context:
                 output = {
                     "hookSpecificOutput": {
@@ -670,31 +650,21 @@ def handle_commit_helper(input_data):
                 print(json.dumps(output))
     
     except subprocess.SubprocessError:
-        # Git command failed, fall back to original behavior
-        # Still try to load template context
-        template_context = load_context_for_hook(
-            hook_type='stop',
+        # Git command failed, still try to load template context
+        template_context = load_stop_reminder_context(
             project_dir=PROJECT_DIR,
             session_id=session_id,
             changed_files=changed_files
         )
         
-        if changed_files:
+        # Provide context if available
+        if template_context:
             output = {
-                "decision": "allow", 
-                "reason": (
-                    f"Session complete. Please run appropriate tests for these modified files and commit the changes: {', '.join(changed_files)}"
-                    "\n If you already committed these changes, please empty the changed files list."
-                )
-            }
-            
-            # Add template context if found
-            if template_context:
-                output["hookSpecificOutput"] = {
+                "hookSpecificOutput": {
                     "hookEventName": "Stop",
                     "additionalContext": template_context
                 }
-            
+            }
             print(json.dumps(output))
     
     return 0
