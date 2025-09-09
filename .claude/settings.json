@@ -52,7 +52,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --commit-helper",
+            "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/rules_hook.py --stop-reminder",
             "timeout": 10
           }
         ]
