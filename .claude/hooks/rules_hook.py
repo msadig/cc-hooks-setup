@@ -17,6 +17,9 @@ import os
 import subprocess
 import sys
 from collections import defaultdict
+from pathlib import Path
+from string import Template
+from typing import Dict, List, Optional
 
 # Get project root
 PROJECT_DIR = os.environ.get('CLAUDE_PROJECT_DIR', '.')
@@ -399,6 +402,165 @@ def handle_plan_enforcer(input_data):
     
     return 0
 
+# Template loading functions integrated directly
+def find_matching_files(pattern: str, root_dir: str) -> List[Path]:
+    """
+    Find files matching gitignore-style pattern.
+    
+    Args:
+        pattern: Gitignore-style pattern (e.g., '**/*STOPREMINDER*.md')
+        root_dir: Root directory to search from
+        
+    Returns:
+        List of matching file paths
+    """
+    matching_files = []
+    root_path = Path(root_dir)
+    
+    # Convert gitignore pattern to pathlib glob pattern
+    if pattern.startswith('./'):
+        pattern = pattern[2:]
+    
+    # Use rglob for recursive search
+    if '**' in pattern:
+        glob_pattern = pattern.replace('**/', '')
+        for file_path in root_path.rglob(glob_pattern):
+            if file_path.is_file():
+                matching_files.append(file_path)
+    else:
+        # Use glob for non-recursive search
+        for file_path in root_path.glob(pattern):
+            if file_path.is_file():
+                matching_files.append(file_path)
+    
+    return matching_files
+
+
+def load_template(file_path: Path) -> str:
+    """Load template content from file."""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except Exception as e:
+        print(f"Error loading template {file_path}: {e}", file=sys.stderr)
+        return ""
+
+
+def get_git_status_for_template(project_dir: str) -> str:
+    """Get current git status for template injection."""
+    try:
+        result = subprocess.run(
+            ['git', 'status', '--short'],
+            capture_output=True,
+            text=True,
+            cwd=project_dir
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return "Git status unavailable"
+
+
+def get_git_diff_summary(project_dir: str) -> str:
+    """Get summary of git changes."""
+    try:
+        result = subprocess.run(
+            ['git', 'diff', '--stat'],
+            capture_output=True,
+            text=True,
+            cwd=project_dir
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return ""
+
+
+def inject_variables(template_content: str, variables: Dict[str, str]) -> str:
+    """
+    Inject variables into template using safe substitution.
+    
+    Args:
+        template_content: Template string with ${variable} placeholders
+        variables: Dictionary of variable names and values
+        
+    Returns:
+        Processed template with variables replaced
+    """
+    template = Template(template_content)
+    # Use safe_substitute to avoid errors on missing variables
+    return template.safe_substitute(variables)
+
+
+def load_context_for_hook(hook_type: str, project_dir: str, session_id: str, 
+                          changed_files: Optional[List[str]] = None) -> Optional[str]:
+    """
+    Load and process markdown templates for a specific hook type.
+    
+    Args:
+        hook_type: Type of hook ('stop', 'commit', 'test', etc.)
+        project_dir: Project root directory
+        session_id: Current session ID
+        changed_files: List of changed files (optional)
+        
+    Returns:
+        Processed context string or None if no templates found
+    """
+    # Define patterns for different hook types
+    patterns = {
+        'stop': ['**/*STOPREMINDER*.md', '**/*STOP_REMINDER*.md'],
+        'commit': ['**/*COMMITHELPER*.md', '**/*COMMIT_HELPER*.md'],
+        'test': ['**/*TESTREMINDER*.md', '**/*TEST_REMINDER*.md'],
+    }
+    
+    # Get patterns for this hook type
+    hook_patterns = patterns.get(hook_type, [])
+    if not hook_patterns:
+        return None
+    
+    # Prepare variables for injection
+    variables = {
+        'session_id': session_id,
+        'timestamp': datetime.datetime.now().isoformat(),
+        'project_name': os.path.basename(project_dir),
+        'project_dir': project_dir,
+        'git_status': get_git_status_for_template(project_dir),
+        'git_diff_summary': get_git_diff_summary(project_dir),
+    }
+    
+    # Add changed files if provided
+    if changed_files:
+        variables['changed_files'] = '\n'.join(f'- {f}' for f in changed_files)
+        variables['changed_files_count'] = str(len(changed_files))
+        variables['changed_files_list'] = ', '.join(changed_files)
+    else:
+        variables['changed_files'] = 'No files tracked'
+        variables['changed_files_count'] = '0'
+        variables['changed_files_list'] = ''
+    
+    # Find and process all matching templates
+    all_contexts = []
+    
+    for pattern in hook_patterns:
+        matching_files = find_matching_files(pattern, project_dir)
+        
+        for file_path in matching_files:
+            template_content = load_template(file_path)
+            if template_content:
+                # Add file-specific variable
+                variables['template_file'] = str(file_path.relative_to(project_dir))
+                
+                processed_content = inject_variables(template_content, variables)
+                all_contexts.append(f"<!-- Context from {file_path.relative_to(project_dir)} -->\n{processed_content}")
+    
+    # Return combined contexts or None
+    if all_contexts:
+        return '\n\n'.join(all_contexts)
+    return None
+
+
 def handle_commit_helper(input_data):
     """
     Handle Stop hook - check if files need committing, otherwise exit cleanly
@@ -464,8 +626,16 @@ def handle_commit_helper(input_data):
                     if gitignore_result.returncode != 0:  # Not ignored
                         uncommitted_files.append(filepath)
         
+        # Load any markdown templates for context injection
+        template_context = load_context_for_hook(
+            hook_type='stop',
+            project_dir=PROJECT_DIR,
+            session_id=session_id,
+            changed_files=uncommitted_files if uncommitted_files else changed_files
+        )
+        
         if uncommitted_files:
-            # Tell Claude to run tests and commit
+            # Build output with optional context
             output = {
                 "decision": "block",
                 "reason": (
@@ -473,6 +643,14 @@ def handle_commit_helper(input_data):
                     "\n If you already committed these changes, please empty the changed files list."
                 )
             }
+            
+            # Add template context if found
+            if template_context:
+                output["hookSpecificOutput"] = {
+                    "hookEventName": "Stop",
+                    "additionalContext": template_context
+                }
+            
             print(json.dumps(output))
         else:
             # All files are committed or ignored, clear the changed files list
@@ -480,9 +658,27 @@ def handle_commit_helper(input_data):
                 os.remove(changed_files_path)
             except OSError:
                 pass
+            
+            # If there's template context even when all is committed, provide it
+            if template_context:
+                output = {
+                    "hookSpecificOutput": {
+                        "hookEventName": "Stop",
+                        "additionalContext": template_context
+                    }
+                }
+                print(json.dumps(output))
     
     except subprocess.SubprocessError:
         # Git command failed, fall back to original behavior
+        # Still try to load template context
+        template_context = load_context_for_hook(
+            hook_type='stop',
+            project_dir=PROJECT_DIR,
+            session_id=session_id,
+            changed_files=changed_files
+        )
+        
         if changed_files:
             output = {
                 "decision": "allow", 
@@ -491,6 +687,14 @@ def handle_commit_helper(input_data):
                     "\n If you already committed these changes, please empty the changed files list."
                 )
             }
+            
+            # Add template context if found
+            if template_context:
+                output["hookSpecificOutput"] = {
+                    "hookEventName": "Stop",
+                    "additionalContext": template_context
+                }
+            
             print(json.dumps(output))
     
     return 0
