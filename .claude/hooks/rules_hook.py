@@ -31,6 +31,8 @@ PRIORITY_ORDER = {
     'medium': 2,
     'low': 1
 }
+DEFAULT_TRIGGER_WORDS = ['plan approved', 'go ahead', 'proceed', 'lgtm']
+
 
 def check_plan_approval(prompt: str, manifest: dict, session_id: str) -> bool:
     """
@@ -41,8 +43,8 @@ def check_plan_approval(prompt: str, manifest: dict, session_id: str) -> bool:
     plan_config = manifest.get('metadata', {}).get('plan_approval', {})
     
     # Get trigger words with fallback to default
-    trigger_words = plan_config.get('trigger_words', ['plan approved'])
-    
+    trigger_words = plan_config.get('trigger_words', DEFAULT_TRIGGER_WORDS)
+
     # Check if any trigger word is in prompt
     prompt_lower = prompt.lower()
     for trigger in trigger_words:
@@ -360,18 +362,18 @@ def handle_plan_enforcer(input_data):
             # Block AI from creating/editing plan_approved file
             approved_flag_file_name in filepath,
             # Special case: if the tool is Bash and command includes 'plan_approved', block it
-            tool_name == 'Bash' and 'plan_approved' in tool_input.get('command', '').lower()
+            tool_name == 'Bash' and approved_flag_file_name in tool_input.get('command', '').lower()
         ]):
         # Check if trigger words are configured
         trigger_hint = ""
         try:
             with open(MANIFEST_PATH, 'r') as f:
                 manifest = json.load(f)
-                triggers = manifest.get('metadata', {}).get('plan_approval', {}).get('trigger_words', ['plan approved'])
+                triggers = manifest.get('metadata', {}).get('plan_approval', {}).get('trigger_words', DEFAULT_TRIGGER_WORDS)
                 trigger_hint = f"\n\nTo approve, use one of these phrases: {', '.join(triggers[:3])}"
         except:
-            trigger_hint = "\n\nTo approve, say: 'plan approved'"
-        
+            trigger_hint = f"\n\nTo approve, say: {', '.join(DEFAULT_TRIGGER_WORDS[:3])}"
+
         print(f"Plan not approved. User must approve the plan first.{trigger_hint}", file=sys.stderr)
         return 2  # Block operation
     
