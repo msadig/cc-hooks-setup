@@ -17,6 +17,8 @@ import os
 import subprocess
 import sys
 from collections import defaultdict
+from string import Template
+from typing import Dict, List
 
 # Get project root
 PROJECT_DIR = os.environ.get('CLAUDE_PROJECT_DIR', '.')
@@ -37,8 +39,6 @@ def check_plan_approval(prompt: str, manifest: dict, session_id: str) -> bool:
     """
     # Get plan approval config
     plan_config = manifest.get('metadata', {}).get('plan_approval', {})
-    if not plan_config.get('enabled', False):
-        return False
     
     # Get trigger words with fallback to default
     trigger_words = plan_config.get('trigger_words', ['plan approved'])
@@ -399,9 +399,60 @@ def handle_plan_enforcer(input_data):
     
     return 0
 
-def handle_commit_helper(input_data):
+# Template loading function (simplified)
+def load_templated_content(patterns: List[str], variables: Dict[str, str] = None) -> str:
     """
-    Handle Stop hook - check if files need committing, otherwise exit cleanly
+    Load and process template files matching patterns.
+    Uses global PROJECT_DIR for file operations.
+    
+    Args:
+        patterns: List of glob patterns to match files
+        variables: Dictionary of variables for template substitution
+        
+    Returns:
+        Combined templated content or empty string if no files found
+    """
+    if variables is None:
+        variables = {}
+    
+    all_contents = []
+    matched_files = set()
+    
+    # Find all matching files using glob directly (like add_always_load_context)
+    for pattern in patterns:
+        full_pattern = os.path.join(PROJECT_DIR, pattern)
+        try:
+            for path in glob.glob(full_pattern, recursive=True):
+                if os.path.isfile(path):
+                    matched_files.add(path)
+        except (OSError, ValueError):
+            pass  # Skip invalid patterns
+    
+    # Load and process each file
+    for file_path in sorted(matched_files):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                if content:
+                    # Add file-specific variable
+                    vars_copy = variables.copy()
+                    vars_copy['template_file'] = os.path.relpath(file_path, PROJECT_DIR)
+                    
+                    # Apply template substitution
+                    template = Template(content)
+                    processed = template.safe_substitute(vars_copy)
+                    
+                    rel_path = os.path.relpath(file_path, PROJECT_DIR)
+                    all_contents.append(f"<!-- Context from {rel_path} -->\n{processed}")
+        except IOError:
+            pass
+    
+    return '\n\n'.join(all_contents) if all_contents else ""
+
+
+def handle_stop_reminder(input_data):
+    """
+    Handle Stop hook - provide STOPREMINDER template context if files exist
     """
     session_id = input_data.get('session_id', 'default')
     
@@ -418,80 +469,57 @@ def handle_commit_helper(input_data):
                 changed_files = [line.strip() for line in f if line.strip()]
         except IOError:
             return 0
+    
+    # Prepare variables for template substitution
+    variables = {
+        'session_id': session_id,
+        'timestamp': datetime.datetime.now().isoformat(),
+        'project_dir': PROJECT_DIR,
+    }
+    
+    # Get git status if we have changed files
+    if changed_files:
+        try:
+            # Get git status
+            result = subprocess.run(['git', 'status', '--short'], 
+                                  capture_output=True, text=True, cwd=PROJECT_DIR)
+            if result.returncode == 0:
+                variables['git_status'] = result.stdout.strip() or "No changes"
+            else:
+                variables['git_status'] = "Git status unavailable"
+        except Exception:
+            variables['git_status'] = "Git status unavailable"
+        
+        # Add changed files to variables
+        variables['changed_files'] = '\n'.join(f'- {f}' for f in changed_files)
+        variables['changed_files_count'] = str(len(changed_files))
+        variables['changed_files_list'] = ', '.join(changed_files)
     else:
-        return 0  # No changed files
+        variables['git_status'] = "No changes"
+        variables['changed_files'] = 'No files tracked'
+        variables['changed_files_count'] = '0'
+        variables['changed_files_list'] = ''
     
-    if not changed_files:
-        return 0  # No files to check
+    # Load STOPREMINDER templates
+    patterns = [
+        '.claude/**/*STOPREMINDER*.md',
+        '.claude/**/*STOP_REMINDER*.md',
+        '**/*STOPREMINDER*.md',
+        '**/*STOP_REMINDER*.md',
+    ]
+    template_context = load_templated_content(patterns, variables)
     
-    # Check git status for each file
-    uncommitted_files = []
-    
-    try:
-        # Get git status
-        result = subprocess.run(['git', 'status', '--porcelain'], 
-                              capture_output=True, text=True, cwd=PROJECT_DIR)
-        
-        if result.returncode == 0:
-            # Parse git status output
-            git_status_lines = result.stdout.strip().split('\n') if result.stdout.strip() else []
-            
-            # Extract files that have changes (staged, modified, or untracked)
-            git_changed_files = set()
-            for line in git_status_lines:
-                if len(line) >= 3:
-                    filepath = line[3:].strip()  # Remove status prefix
-                    git_changed_files.add(filepath)
-            
-            
-            # Check if any files from changed_files.txt are uncommitted
-            for filepath in changed_files:
-                # Normalize paths - handle both absolute and relative paths
-                if os.path.isabs(filepath):
-                    # Convert absolute path to relative
-                    try:
-                        normalized_path = os.path.relpath(filepath, PROJECT_DIR)
-                    except ValueError:
-                        normalized_path = filepath
-                else:
-                    normalized_path = filepath
-                
-                if normalized_path in git_changed_files:
-                    # Check if file is in .gitignore
-                    gitignore_result = subprocess.run(['git', 'check-ignore', filepath], 
-                                                    capture_output=True, cwd=PROJECT_DIR)
-                    
-                    if gitignore_result.returncode != 0:  # Not ignored
-                        uncommitted_files.append(filepath)
-        
-        if uncommitted_files:
-            # Tell Claude to run tests and commit
-            output = {
-                "decision": "block",
-                "reason": (
-                    f"Session complete. Please run appropriate tests for these modified files and commit the changes: {', '.join(uncommitted_files)}"
-                    "\n If you already committed these changes, please empty the changed files list."
-                )
-            }
-            print(json.dumps(output))
-        else:
-            # All files are committed or ignored, clear the changed files list
-            try:
-                os.remove(changed_files_path)
-            except OSError:
-                pass
-    
-    except subprocess.SubprocessError:
-        # Git command failed, fall back to original behavior
-        if changed_files:
-            output = {
-                "decision": "allow", 
-                "reason": (
-                    f"Session complete. Please run appropriate tests for these modified files and commit the changes: {', '.join(changed_files)}"
-                    "\n If you already committed these changes, please empty the changed files list."
-                )
-            }
-            print(json.dumps(output))
+    # If there's template context, provide it as a reminder (not blocking)
+    if template_context:
+        # For Stop hooks, we print to stdout with exit code 0 for non-blocking reminders
+        # This will be shown in transcript mode but won't affect Claude's behavior
+        print(template_context)
+    elif changed_files:
+        # No templates but we have changed files, clear the list
+        try:
+            os.remove(changed_files_path)
+        except OSError:
+            pass
     
     return 0
 
@@ -822,8 +850,8 @@ def main():
                        help='Enable prompt validation and rule injection')
     parser.add_argument('--plan-enforcer', action='store_true',
                        help='Enable plan enforcement for file modifications')
-    parser.add_argument('--commit-helper', action='store_true',
-                       help='Enable commit helper for changed files')
+    parser.add_argument('--stop-reminder', action='store_true',
+                       help='Enable stop reminder templates')
     parser.add_argument('--session-start', action='store_true',
                        help='Enable session start context loading')
     parser.add_argument('--file-matcher', action='store_true',
@@ -853,8 +881,8 @@ def main():
         exit_code = handle_plan_enforcer(input_data)
     elif hook_event_name == 'PreToolUse' and args.file_matcher:
         exit_code = handle_pretool_file_matcher(input_data)
-    elif hook_event_name == 'Stop' and args.commit_helper:
-        exit_code = handle_commit_helper(input_data)
+    elif hook_event_name == 'Stop' and args.stop_reminder:
+        exit_code = handle_stop_reminder(input_data)
     elif hook_event_name == 'SessionStart' and args.session_start:
         exit_code = handle_session_start(input_data)
     

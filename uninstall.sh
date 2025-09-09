@@ -173,7 +173,7 @@ if [[ "$uninstall_rules" == "y" || "$uninstall_rules" == "Y" ]]; then
     remove_hooks_from_group "PreToolUse" "rules_hook.py --immutable-check"
     remove_hooks_from_group "PreToolUse" "rules_hook.py --plan-enforcer"
     remove_hooks_from_group "PreToolUse" "rules_hook.py --file-matcher"
-    remove_hooks_from_group "Stop" "rules_hook.py --commit-helper"
+    remove_hooks_from_group "Stop" "rules_hook.py --stop-reminder"
     remove_hooks_from_group "SessionStart" "rules_hook.py --session-start"
     
     echo -e "${GREEN}✓${NC} Rules Hook removed"

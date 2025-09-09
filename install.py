@@ -57,7 +57,7 @@ RULES_HOOKS = [
     ("PreToolUse", "--immutable-check", 5, "Write|Edit|MultiEdit|NotebookEdit"),
     ("PreToolUse", "--plan-enforcer", 5, ""),
     ("PreToolUse", "--file-matcher", 5, "Read|Write|Edit|MultiEdit|NotebookEdit"),
-    ("Stop", "--commit-helper", 10, ""),
+    ("Stop", "--stop-reminder", 10, ""),
     ("SessionStart", "--session-start", 10, ""),
 ]
 
