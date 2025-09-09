@@ -503,7 +503,12 @@ def handle_stop_reminder(input_data):
         variables['changed_files_list'] = ''
     
     # Load STOPREMINDER templates
-    patterns = ['**/*STOPREMINDER*.md', '**/*STOP_REMINDER*.md']
+    patterns = [
+        '.claude/**/*STOPREMINDER*.md',
+        '.claude/**/*STOP_REMINDER*.md',
+        '**/*STOPREMINDER*.md',
+        '**/*STOP_REMINDER*.md',
+    ]
     template_context = load_templated_content(patterns, variables)
     
     # If there's template context, provide it as a reminder (not blocking)
