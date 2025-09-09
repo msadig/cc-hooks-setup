@@ -39,8 +39,6 @@ def check_plan_approval(prompt: str, manifest: dict, session_id: str) -> bool:
     """
     # Get plan approval config
     plan_config = manifest.get('metadata', {}).get('plan_approval', {})
-    if not plan_config.get('enabled', False):
-        return False
     
     # Get trigger words with fallback to default
     trigger_words = plan_config.get('trigger_words', ['plan approved'])
