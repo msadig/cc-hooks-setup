@@ -65,8 +65,9 @@ def check_plan_approval(prompt: str, manifest: dict, session_id: str) -> bool:
     return False
 
 
-def add_always_load_context():
+def add_always_load_context(input_data: dict = None) -> str:
     """Load critical context files that should always be available."""
+    session_id = input_data.get('session_id', 'default') if input_data else 'default'
     # Primary context files (glob pattern matching)
     primary_context_patterns = [
         "docs/**/RULES.md",
@@ -76,34 +77,17 @@ def add_always_load_context():
         ".claude/**/MEMORY.md",
         ".claude/**/REQUIREMENTS.md",
     ]
-    
-    context_parts = []
 
-    # Load primary context files with glob pattern matching
-    matched_primary_files = set()  # Use set to avoid duplicates
+    variables = {
+        'session_id': session_id,
+        'timestamp': datetime.datetime.now().isoformat(),
+        'timestamp_formatted': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'project_dir': PROJECT_DIR,
+    }
     
-    for pattern in primary_context_patterns:
-        # Use glob to find all files matching the pattern
-        full_pattern = os.path.join(PROJECT_DIR, pattern)
-        try:
-            for matched_path in glob.glob(full_pattern, recursive=True):
-                if os.path.isfile(matched_path):
-                    matched_primary_files.add(matched_path)
-        except (OSError, ValueError):
-            pass  # Skip invalid patterns
-    
-    # Sort files for consistent ordering
-    for full_path in sorted(matched_primary_files):
-        try:
-            with open(full_path, 'r') as f:
-                context_content = f.read().strip()
-                if context_content:
-                    rel_path = os.path.relpath(full_path, PROJECT_DIR)
-                    context_parts.append(f"Context from {rel_path}:\n{context_content}")
-        except IOError:
-            pass
+    context_parts = load_templated_content(primary_context_patterns, variables)
 
-    return "\n".join(context_parts)
+    return context_parts
 
 def detect_relevant_agents(manifest, matched_rule_names):
     """
@@ -180,7 +164,7 @@ def handle_prompt_validator(input_data):
     prompt_lower = prompt.lower()
     
     # First, always load context files (works even without manifest)
-    always_load_context = add_always_load_context()
+    always_load_context = add_always_load_context(input_data)
     
     # Check if manifest exists for rule processing
     if not manifest:
@@ -754,52 +738,61 @@ def handle_session_start(input_data):
     source = input_data.get('source', 'unknown')  # "startup", "resume", "clear"
     session_id = input_data.get('session_id', 'default')
     
-    # Build development context
-    context_parts = []
+    # Prepare variables for template substitution
+    variables = {
+        'session_id': session_id,
+        'source': source,
+        'timestamp': datetime.datetime.now().isoformat(),
+        'timestamp_formatted': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'project_dir': PROJECT_DIR,
+    }
     
-    # Add session start header
-    context_parts.append(f"🏁 Session started at: {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    context_parts.append(f"Session source: {source}, Session ID: {session_id}")
-    context_parts.append("")
+    # Add git information if available
+    try:
+        result = subprocess.run(['git', 'branch', '--show-current'], 
+                              capture_output=True, text=True, cwd=PROJECT_DIR)
+        if result.returncode == 0:
+            variables['git_branch'] = result.stdout.strip() or "unknown"
+        else:
+            variables['git_branch'] = "unknown"
+    except Exception:
+        variables['git_branch'] = "unknown"
+    
+    try:
+        result = subprocess.run(['git', 'status', '--short'], 
+                              capture_output=True, text=True, cwd=PROJECT_DIR)
+        if result.returncode == 0:
+            variables['git_status'] = result.stdout.strip() or "clean"
+        else:
+            variables['git_status'] = "unavailable"
+    except Exception:
+        variables['git_status'] = "unavailable"
 
-    # Project-specific context files (glob pattern matching)
+    # Use load_templated_content for all session context files
     context_file_patterns = [
         ".claude/**/CONTEXT.md",
         ".claude/**/WORKFLOW.md", 
         ".claude/**/SESSION.md",
         ".claude/**/*-WORKFLOW.md",
         ".claude/**/*-CONTEXT.md",
+        ".claude/**/*START*.md",
     ]
     
-    # Load project-specific context files with glob pattern matching
-    matched_files = set()  # Use set to avoid duplicates
+    # Load all context using the existing template system
+    templated_context = load_templated_content(context_file_patterns, variables)
     
-    for pattern in context_file_patterns:
-        # Use glob to find all files matching the pattern
-        full_pattern = os.path.join(PROJECT_DIR, pattern)
-        try:
-            for matched_path in glob.glob(full_pattern, recursive=True):
-                if os.path.isfile(matched_path):
-                    matched_files.add(matched_path)
-        except (OSError, ValueError):
-            pass  # Skip invalid patterns
-    
-    # Sort files for consistent ordering
-    for full_path in sorted(matched_files):
-        try:
-            with open(full_path, 'r') as f:
-                content = f.read().strip()
-                if content:
-                    # Get relative path for display
-                    rel_path = os.path.relpath(full_path, PROJECT_DIR)
-                    # Limit to first 3000 chars as in original helper
-                    context_parts.append(f"\n--- Content from {rel_path} ---")
-                    context_parts.append(content[:3000])
-        except IOError:
-            pass
+    # Build final context with session header + templated content
+    if templated_context:
+        complete_context = f"""🏁 Session started at: {variables['timestamp_formatted']}
+Session source: {source}, Session ID: {session_id}
 
-    # Join all context
-    complete_context = "\n".join(context_parts)
+{templated_context}"""
+    else:
+        # Fallback if no context files found
+        complete_context = f"""🏁 Session started at: {variables['timestamp_formatted']}
+Session source: {source}, Session ID: {session_id}
+Git branch: {variables['git_branch']}
+Project directory: {PROJECT_DIR}"""
     
     # Output using JSON format for SessionStart
     output = {
